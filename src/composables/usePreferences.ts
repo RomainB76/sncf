@@ -1,72 +1,72 @@
 /**
- * Préférences d'affichage.
+ * Display preferences.
  *
- * « Motifs » ajoute des hachures aux segments Majeure et Bloquante : un second canal, en plus
- * de la couleur, pour les personnes daltoniennes, l'impression en niveaux de gris ou le mode
- * de contraste élevé de Windows (activé d'office dans ce dernier cas).
+ * « Patterns » adds hatching to the Major and Blocking segments: a second channel, besides
+ * colour, for colour-blind people, greyscale printing or the Windows high-contrast mode
+ * (enabled automatically in that last case).
  */
 import { computed, ref, watchEffect } from 'vue'
 
-const CLE_STOCKAGE = 'suivi-anomalies:motifs'
+const STORAGE_KEY = 'anomaly-tracking:patterns'
 
-function lire(): boolean {
+function readStored(): boolean {
   try {
-    return localStorage.getItem(CLE_STOCKAGE) === '1'
+    return localStorage.getItem(STORAGE_KEY) === '1'
   } catch {
     return false
   }
 }
 
-const requeteContraste =
+const forcedColorsQuery =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(forced-colors: active)')
     : null
 
-const motifsChoisis = ref(lire())
-const contrasteForce = ref(requeteContraste?.matches ?? false)
-requeteContraste?.addEventListener('change', (e) => {
-  contrasteForce.value = e.matches
+const patternsChosen = ref(readStored())
+const forcedColors = ref(forcedColorsQuery?.matches ?? false)
+forcedColorsQuery?.addEventListener('change', (e) => {
+  forcedColors.value = e.matches
 })
 
-const requeteMouvement =
+const reducedMotionQuery =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(prefers-reduced-motion: reduce)')
     : null
-const mouvementReduit = ref(requeteMouvement?.matches ?? false)
-requeteMouvement?.addEventListener('change', (e) => {
-  mouvementReduit.value = e.matches
+const reducedMotion = ref(reducedMotionQuery?.matches ?? false)
+reducedMotionQuery?.addEventListener('change', (e) => {
+  reducedMotion.value = e.matches
 })
 
-const requeteEtroit =
+const narrowScreenQuery =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(max-width: 640px)')
     : null
-/** Téléphone en portrait : les graphiques compactent leurs libellés d'axe. */
-const ecranEtroit = ref(requeteEtroit?.matches ?? false)
-requeteEtroit?.addEventListener('change', (e) => {
-  ecranEtroit.value = e.matches
+/** Phone in portrait mode: charts shorten their axis labels. */
+const narrowScreen = ref(narrowScreenQuery?.matches ?? false)
+narrowScreenQuery?.addEventListener('change', (e) => {
+  narrowScreen.value = e.matches
 })
 
-/** `true` si les motifs doivent être dessinés (choix de l'utilisateur ou contraste forcé). */
-const motifs = computed(() => motifsChoisis.value || contrasteForce.value)
+/** `true` when patterns must be drawn (user choice or forced colours). */
+const patterns = computed(() => patternsChosen.value || forcedColors.value)
 
-// Reflété sur <html> pour que les pastilles de légende (CSS) suivent les graphiques.
+// Mirrored on <html> so that the legend dots (CSS) follow the charts.
 if (typeof document !== 'undefined') {
-  watchEffect(() => document.documentElement.toggleAttribute('data-motifs', motifs.value))
+  watchEffect(() => document.documentElement.toggleAttribute('data-patterns', patterns.value))
 }
 
 export function usePreferences() {
   return {
-    motifsChoisis,
-    motifs,
-    mouvementReduit,
-    ecranEtroit,
-    basculerMotifs(): void {
-      motifsChoisis.value = !motifsChoisis.value
+    patternsChosen,
+    patterns,
+    reducedMotion,
+    narrowScreen,
+    togglePatterns(): void {
+      patternsChosen.value = !patternsChosen.value
       try {
-        localStorage.setItem(CLE_STOCKAGE, motifsChoisis.value ? '1' : '0')
+        localStorage.setItem(STORAGE_KEY, patternsChosen.value ? '1' : '0')
       } catch {
-        /* stockage indisponible : le choix vaut pour la session */
+        /* storage unavailable: the choice holds for the session */
       }
     },
   }

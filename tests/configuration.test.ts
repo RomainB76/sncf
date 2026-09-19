@@ -1,51 +1,51 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
-import { chargerConfiguration, ErreurConfiguration, fusionnerConfiguration } from '@/config/configuration'
+import { ConfigurationError, loadConfiguration, mergeConfiguration } from '@/config/configuration'
 
-const URL_CONFIG = 'http://localhost:5173/config.json'
-const URL_LOCALE = 'http://localhost:5173/config.local.json'
+const CONFIG_URL = 'http://localhost:5173/config.json'
+const LOCAL_URL = 'http://localhost:5173/config.local.json'
 
-/** Contenu type de public/config.json (valeurs de démonstration, aucun secret). */
+/** Typical content of public/config.json (demo values, no secret). */
 const CONFIG_JSON = {
-  api: { url: '/mock-api/export-anomalies', jwtToken: 'jeton-de-demonstration', viaProxy: false, timeoutMs: 30_000 },
-  donnees: { feuille: 'Données Globales', joursOuvres: 'auto', exclureJoursFeries: true },
-  equipes: ['AFFAIRES', 'CHAUDRO'],
+  api: { url: '/mock-api/anomalies-export', jwtToken: 'demo-token', viaProxy: false, timeoutMs: 30_000 },
+  data: { sheet: 'Données Globales', businessDays: 'auto', excludePublicHolidays: true },
+  teams: ['AFFAIRES', 'CHAUDRO'],
   machines: ['Z27575', 'Z27665'],
-  rafraichissementAutoMinutes: 0,
+  autoRefreshMinutes: 0,
 }
 
-/** Contenu type de public/config.local.json : la vraie URL et le vrai token, rien d'autre. */
-const SURCHARGE = {
-  api: { url: 'https://cle.exemple.test/api/anomalies/export', jwtToken: 'jeton-local', viaProxy: true },
+/** Typical content of public/config.local.json: the real URL and the real token, nothing else. */
+const OVERRIDE = {
+  api: { url: 'https://cle.exemple.test/api/anomalies/export', jwtToken: 'local-token', viaProxy: true },
   machines: ['X76605'],
 }
 
-type Fabrique = () => Response
+type Factory = () => Response
 
-function json(corps: unknown): Response {
-  return new Response(JSON.stringify(corps), { status: 200, headers: { 'content-type': 'application/json' } })
+function json(body: unknown): Response {
+  return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
 }
 
-function reponse(corps: string, statut: number, typeContenu?: string): Response {
-  return new Response(corps, { status: statut, headers: typeContenu ? { 'content-type': typeContenu } : {} })
+function response(body: string, status: number, contentType?: string): Response {
+  return new Response(body, { status, headers: contentType ? { 'content-type': contentType } : {} })
 }
 
-/** Simule fetch : une fabrique de réponse par URL (réponse neuve à chaque appel, un corps ne se lit qu'une fois). */
-function simulerFetch(reponses: Record<string, Fabrique>) {
-  const fetchSimule = vi.fn((entree: string | URL | Request, _init?: RequestInit): Promise<Response> => {
-    const url = typeof entree === 'string' ? entree : entree instanceof URL ? entree.toString() : entree.url
-    const fabrique = reponses[url]
-    return fabrique ? Promise.resolve(fabrique()) : Promise.reject(new TypeError(`Failed to fetch (${url})`))
+/** Mocks fetch: one response factory per URL (a fresh response on each call, a body can only be read once). */
+function mockFetch(responses: Record<string, Factory>) {
+  const fetchMock = vi.fn((input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const factory = responses[url]
+    return factory ? Promise.resolve(factory()) : Promise.reject(new TypeError(`Failed to fetch (${url})`))
   })
-  vi.stubGlobal('fetch', fetchSimule)
-  return fetchSimule
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
 }
 
-let avertir: MockInstance<typeof console.warn>
+let warn: MockInstance<typeof console.warn>
 
 beforeEach(() => {
-  // Le chargeur résout les URL par rapport à la page : on simule le navigateur.
+  // The loader resolves URLs against the page: the browser is simulated.
   vi.stubGlobal('document', { baseURI: 'http://localhost:5173/' })
-  avertir = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
 afterEach(() => {
@@ -53,96 +53,96 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('fusionnerConfiguration', () => {
-  it('fusionne api et donnees clé par clé, remplace les listes en bloc et laisse le reste', () => {
+describe('mergeConfiguration', () => {
+  it('merges api and data key by key, replaces the lists as a whole and keeps the rest', () => {
     expect(
-      fusionnerConfiguration(CONFIG_JSON, {
-        api: { url: 'https://cle.exemple.test/export', jwtToken: 'jeton-local' },
-        donnees: { joursOuvres: 'calcul' },
-        equipes: ['NUIT'],
+      mergeConfiguration(CONFIG_JSON, {
+        api: { url: 'https://cle.exemple.test/export', jwtToken: 'local-token' },
+        data: { businessDays: 'computed' },
+        teams: ['NUIT'],
       }),
     ).toEqual({
-      api: { url: 'https://cle.exemple.test/export', jwtToken: 'jeton-local', viaProxy: false, timeoutMs: 30_000 },
-      donnees: { feuille: 'Données Globales', joursOuvres: 'calcul', exclureJoursFeries: true },
-      equipes: ['NUIT'],
+      api: { url: 'https://cle.exemple.test/export', jwtToken: 'local-token', viaProxy: false, timeoutMs: 30_000 },
+      data: { sheet: 'Données Globales', businessDays: 'computed', excludePublicHolidays: true },
+      teams: ['NUIT'],
       machines: ['Z27575', 'Z27665'],
-      rafraichissementAutoMinutes: 0,
+      autoRefreshMinutes: 0,
     })
   })
 
-  it('ignore une surcharge, ou une section, qui n’est pas un objet', () => {
-    expect(fusionnerConfiguration(CONFIG_JSON, null)).toEqual(CONFIG_JSON)
-    expect(fusionnerConfiguration(CONFIG_JSON, ['api'])).toEqual(CONFIG_JSON)
-    expect(fusionnerConfiguration(CONFIG_JSON, { api: 'texte', donnees: null })).toEqual(CONFIG_JSON)
+  it('ignores an override, or a section, that is not an object', () => {
+    expect(mergeConfiguration(CONFIG_JSON, null)).toEqual(CONFIG_JSON)
+    expect(mergeConfiguration(CONFIG_JSON, ['api'])).toEqual(CONFIG_JSON)
+    expect(mergeConfiguration(CONFIG_JSON, { api: 'text', data: null })).toEqual(CONFIG_JSON)
   })
 
-  it('ne modifie pas les objets reçus', () => {
+  it('does not mutate the received objects', () => {
     const base = structuredClone(CONFIG_JSON)
-    fusionnerConfiguration(base, SURCHARGE)
+    mergeConfiguration(base, OVERRIDE)
     expect(base).toEqual(CONFIG_JSON)
   })
 })
 
-describe('chargerConfiguration', () => {
-  it('lit config.json puis config.local.json, sans cache, et applique la surcharge', async () => {
-    const fetchSimule = simulerFetch({ [URL_CONFIG]: () => json(CONFIG_JSON), [URL_LOCALE]: () => json(SURCHARGE) })
+describe('loadConfiguration', () => {
+  it('reads config.json then config.local.json, without cache, and applies the override', async () => {
+    const fetchMock = mockFetch({ [CONFIG_URL]: () => json(CONFIG_JSON), [LOCAL_URL]: () => json(OVERRIDE) })
 
-    const config = await chargerConfiguration()
+    const config = await loadConfiguration()
 
-    expect(fetchSimule.mock.calls.map(([url]) => url)).toEqual([URL_CONFIG, URL_LOCALE])
-    for (const [, init] of fetchSimule.mock.calls) expect(init?.cache).toBe('no-store')
-    expect(config.api).toEqual({ ...SURCHARGE.api, timeoutMs: 30_000 })
-    expect(config.donnees).toEqual(CONFIG_JSON.donnees)
-    expect(config.equipes).toEqual(CONFIG_JSON.equipes)
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([CONFIG_URL, LOCAL_URL])
+    for (const [, init] of fetchMock.mock.calls) expect(init?.cache).toBe('no-store')
+    expect(config.api).toEqual({ ...OVERRIDE.api, timeoutMs: 30_000 })
+    expect(config.data).toEqual(CONFIG_JSON.data)
+    expect(config.teams).toEqual(CONFIG_JSON.teams)
     expect(config.machines).toEqual(['X76605'])
-    expect(avertir).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
   })
 
-  it('garde config.json tel quel quand config.local.json est absent (404), sans avertissement', async () => {
-    simulerFetch({ [URL_CONFIG]: () => json(CONFIG_JSON), [URL_LOCALE]: () => reponse('Not Found', 404, 'text/plain') })
+  it('keeps config.json as is when config.local.json is missing (404), without a warning', async () => {
+    mockFetch({ [CONFIG_URL]: () => json(CONFIG_JSON), [LOCAL_URL]: () => response('Not Found', 404, 'text/plain') })
 
-    const config = await chargerConfiguration()
+    const config = await loadConfiguration()
 
     expect(config.api).toEqual(CONFIG_JSON.api)
     expect(config.machines).toEqual(CONFIG_JSON.machines)
-    expect(avertir).not.toHaveBeenCalled()
+    expect(warn).not.toHaveBeenCalled()
   })
 
-  it('ignore une page HTML renvoyée à la place de config.local.json (repli index.html du serveur Vite)', async () => {
+  it('ignores an HTML page returned instead of config.local.json (index.html fallback of the Vite server)', async () => {
     const page = '<!doctype html>\n<html><head><title>Suivi des anomalies</title></head><body></body></html>'
-    simulerFetch({ [URL_CONFIG]: () => json(CONFIG_JSON), [URL_LOCALE]: () => reponse(page, 200, 'text/html; charset=utf-8') })
-    expect((await chargerConfiguration()).api).toEqual(CONFIG_JSON.api)
+    mockFetch({ [CONFIG_URL]: () => json(CONFIG_JSON), [LOCAL_URL]: () => response(page, 200, 'text/html; charset=utf-8') })
+    expect((await loadConfiguration()).api).toEqual(CONFIG_JSON.api)
 
-    // Même sans Content-Type HTML, le contenu suffit à reconnaître une page.
-    simulerFetch({ [URL_CONFIG]: () => json(CONFIG_JSON), [URL_LOCALE]: () => reponse(`  ${page}`, 200) })
-    expect((await chargerConfiguration()).api).toEqual(CONFIG_JSON.api)
-    expect(avertir).not.toHaveBeenCalled()
+    // Even without an HTML Content-Type, the content is enough to recognize a page.
+    mockFetch({ [CONFIG_URL]: () => json(CONFIG_JSON), [LOCAL_URL]: () => response(`  ${page}`, 200) })
+    expect((await loadConfiguration()).api).toEqual(CONFIG_JSON.api)
+    expect(warn).not.toHaveBeenCalled()
   })
 
-  it('ignore un config.local.json mal formé, en le signalant en console', async () => {
-    simulerFetch({ [URL_CONFIG]: () => json(CONFIG_JSON), [URL_LOCALE]: () => reponse('{ "api": { "url": ', 200, 'application/json') })
-    expect((await chargerConfiguration()).api).toEqual(CONFIG_JSON.api)
-    expect(avertir).toHaveBeenCalledOnce()
-    expect(avertir.mock.calls[0]?.[0]).toMatch(/config\.local\.json/)
+  it('ignores a malformed config.local.json and reports it in the console', async () => {
+    mockFetch({ [CONFIG_URL]: () => json(CONFIG_JSON), [LOCAL_URL]: () => response('{ "api": { "url": ', 200, 'application/json') })
+    expect((await loadConfiguration()).api).toEqual(CONFIG_JSON.api)
+    expect(warn).toHaveBeenCalledOnce()
+    expect(warn.mock.calls[0]?.[0]).toMatch(/config\.local\.json/)
 
-    avertir.mockClear()
-    simulerFetch({ [URL_CONFIG]: () => json(CONFIG_JSON), [URL_LOCALE]: () => json(['pas', 'un', 'objet']) })
-    expect((await chargerConfiguration()).api).toEqual(CONFIG_JSON.api)
-    expect(avertir).toHaveBeenCalledOnce()
+    warn.mockClear()
+    mockFetch({ [CONFIG_URL]: () => json(CONFIG_JSON), [LOCAL_URL]: () => json(['not', 'an', 'object']) })
+    expect((await loadConfiguration()).api).toEqual(CONFIG_JSON.api)
+    expect(warn).toHaveBeenCalledOnce()
   })
 
-  it('ignore une erreur réseau sur config.local.json', async () => {
-    simulerFetch({ [URL_CONFIG]: () => json(CONFIG_JSON) }) // toute autre URL est rejetée
-    expect((await chargerConfiguration()).api).toEqual(CONFIG_JSON.api)
-    expect(avertir).not.toHaveBeenCalled()
+  it('ignores a network error on config.local.json', async () => {
+    mockFetch({ [CONFIG_URL]: () => json(CONFIG_JSON) }) // any other URL is rejected
+    expect((await loadConfiguration()).api).toEqual(CONFIG_JSON.api)
+    expect(warn).not.toHaveBeenCalled()
   })
 
-  it('signale toujours un config.json absent ou invalide, sans lire la surcharge', async () => {
-    const fetchSimule = simulerFetch({ [URL_CONFIG]: () => reponse('Not Found', 404), [URL_LOCALE]: () => json(SURCHARGE) })
-    await expect(chargerConfiguration()).rejects.toThrow(ErreurConfiguration)
-    expect(fetchSimule).toHaveBeenCalledOnce()
+  it('still reports a missing or invalid config.json, without reading the override', async () => {
+    const fetchMock = mockFetch({ [CONFIG_URL]: () => response('Not Found', 404), [LOCAL_URL]: () => json(OVERRIDE) })
+    await expect(loadConfiguration()).rejects.toThrow(ConfigurationError)
+    expect(fetchMock).toHaveBeenCalledOnce()
 
-    simulerFetch({ [URL_CONFIG]: () => reponse('{ pas du json', 200, 'application/json'), [URL_LOCALE]: () => json(SURCHARGE) })
-    await expect(chargerConfiguration()).rejects.toThrow(/JSON valide/)
+    mockFetch({ [CONFIG_URL]: () => response('{ not json', 200, 'application/json'), [LOCAL_URL]: () => json(OVERRIDE) })
+    await expect(loadConfiguration()).rejects.toThrow(/JSON valide/)
   })
 })

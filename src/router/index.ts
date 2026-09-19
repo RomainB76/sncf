@@ -1,26 +1,26 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
 /**
- * Une route par feuille du classeur : le tableau de bord, puis une page par équipe.
+ * One route per sheet of the workbook: the dashboard, then one page per team.
  *
- * Historique en « hash » (#/equipe/nuit) : l'application fonctionne sur n'importe quel serveur
- * statique, y compris dans un sous-dossier, sans règle de réécriture d'URL.
+ * Hash history (#/team/nuit): the application works on any static server, including in a
+ * sub-folder, without any URL rewriting rule.
  */
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
       path: '/',
-      name: 'tableau-de-bord',
-      component: () => import('@/views/VueTableauDeBord.vue'),
+      name: 'dashboard',
+      component: () => import('@/views/DashboardView.vue'),
     },
     {
-      path: '/equipe/:slug',
-      name: 'equipe',
-      component: () => import('@/views/VueEquipe.vue'),
+      path: '/team/:slug',
+      name: 'team',
+      component: () => import('@/views/TeamView.vue'),
       props: true,
     },
-    { path: '/:inconnu(.*)*', redirect: { name: 'tableau-de-bord' } },
+    { path: '/:unknown(.*)*', redirect: { name: 'dashboard' } },
   ],
-  scrollBehavior: (_vers, _depuis, positionSauvegardee) => positionSauvegardee ?? { top: 0 },
+  scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
 })

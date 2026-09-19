@@ -50,10 +50,10 @@ par `.gitignore` — copiez [public/config.local.example.json](public/config.loc
 }
 ```
 
-`config.local.json` est lu juste après `config.json` et **ses valeurs l'emportent** : les sections `api` et `donnees`
-sont fusionnées clé par clé (ci-dessus, `viaProxy` et `timeoutMs` restent ceux de `config.json`), les listes `equipes`
+`config.local.json` est lu juste après `config.json` et **ses valeurs l'emportent** : les sections `api` et `data`
+sont fusionnées clé par clé (ci-dessus, `viaProxy` et `timeoutMs` restent ceux de `config.json`), les listes `teams`
 et `machines` sont remplacées en bloc si le fichier les définit. Il est relu lui aussi à chaque actualisation ; absent,
-l'application se comporte exactement comme avant. Le relais `/proxy-cle` du serveur Vite lit la même surcharge :
+l'application se comporte exactement comme avant. Le relais `/cle-proxy` du serveur Vite lit la même surcharge :
 navigateur et relais visent toujours la même URL.
 
 Avant de pousser : `git status` ne doit jamais lister `public/config.local.json`, et `git diff public/config.json` ne
@@ -65,13 +65,13 @@ doit montrer aucun token réel.
 | `api.jwtToken` | Token JWT, envoyé dans l'en-tête `Authorization: Bearer <token>` |
 | `api.viaProxy` | `true` = l'appel passe par le relais du serveur Vite (voir CORS ci-dessous) |
 | `api.timeoutMs` | Délai maximal de l'appel |
-| `donnees.feuille` | Feuille à lire dans le classeur reçu ; à défaut, la première |
-| `donnees.joursOuvres` | `auto`, `fichier` ou `calcul` (voir « Jours ouvrés ») |
-| `donnees.exclureJoursFeries` | Retire les jours fériés français du calcul des jours ouvrés |
-| `equipes`, `machines` | Listes du classeur d'origine, dans l'ordre d'affichage |
-| `rafraichissementAutoMinutes` | Actualisation automatique (0 = désactivée), pratique sur un écran d'atelier |
+| `data.sheet` | Feuille à lire dans le classeur reçu ; à défaut, la première |
+| `data.businessDays` | `auto`, `file` ou `computed` (voir « Jours ouvrés ») |
+| `data.excludePublicHolidays` | Retire les jours fériés français du calcul des jours ouvrés |
+| `teams`, `machines` | Listes du classeur d'origine, dans l'ordre d'affichage |
+| `autoRefreshMinutes` | Actualisation automatique (0 = désactivée), pratique sur un écran d'atelier |
 
-Le service d'appel est [src/services/apiCle.ts](src/services/apiCle.ts). Il distingue et explique chaque échec :
+Le service d'appel est [src/services/cleApi.ts](src/services/cleApi.ts). Il distingue et explique chaque échec :
 configuration incomplète, token refusé (avec la date d'expiration lue dans le JWT), erreur HTTP, clé injoignable,
 délai dépassé, réponse qui n'est pas un classeur (page de connexion HTML, JSON…).
 
@@ -79,11 +79,11 @@ délai dépassé, réponse qui n'est pas un classeur (page de connexion HTML, JS
 
 Un appel direct du navigateur vers clé n'aboutit que si clé autorise l'origine de l'application. Sinon le navigateur
 bloque la réponse et l'application affiche « clé est injoignable ». Passez alors **`"viaProxy": true`** (dans
-`config.local.json` ou `config.json`) : l'appel transite par `/proxy-cle`, exécuté côté serveur Node (dev et preview),
+`config.local.json` ou `config.json`) : l'appel transite par `/cle-proxy`, exécuté côté serveur Node (dev et preview),
 donc non soumis au CORS. `api.url` doit dans ce cas être une URL absolue.
 
 En production sur un serveur statique, deux options : faire autoriser l'origine côté clé, ou reproduire le relais sur
-le serveur web frontal (nginx, IIS…) en exposant `/proxy-cle` vers l'URL de clé.
+le serveur web frontal (nginx, IIS…) en exposant `/cle-proxy` vers l'URL de clé.
 
 > **Sécurité.** `config.json` et `config.local.json` sont servis au navigateur : toute personne ayant accès à
 > l'application peut lire le token. C'est acceptable pour tester. Pour un déploiement partagé, préférez un relais côté
@@ -105,17 +105,17 @@ Les formules sont transcrites à l'identique dans [src/domain/](src/domain/), ch
 
 | Excel | Formule | Application |
 |---|---|---|
-| Priorité (col. M) | `=SI(K>4;"Bloquante";SI(K>=3;"Majeure";SI(K>=1;"Mineure";"")))` | `prioriteDepuisJours` |
-| Total Anomalies | `=NBVAL('Données Globales'!A:A)-1` | `indicateursGlobaux` |
-| Bloquantes / Majeures / Mineures | `=NB.SI('Données Globales'!M:M;"…")` | `indicateursGlobaux` |
-| ALERTE >4 jours | `=NB.SI('Données Globales'!K:K;">4")` | `indicateursGlobaux` |
-| Synthèse par Équipe | `=NB.SI.ENS(E:E;équipe;M:M;priorité)`, Total, Total Général | `syntheseParEquipe` |
-| Feuilles équipe | `=NB.SI.ENS(E:E;équipe;F:F;rame;M:M;priorité)`, Total | `analyseEquipe` |
+| Priorité (col. M) | `=SI(K>4;"Bloquante";SI(K>=3;"Majeure";SI(K>=1;"Mineure";"")))` | `priorityFromDays` |
+| Total Anomalies | `=NBVAL('Données Globales'!A:A)-1` | `globalIndicators` |
+| Bloquantes / Majeures / Mineures | `=NB.SI('Données Globales'!M:M;"…")` | `globalIndicators` |
+| ALERTE >4 jours | `=NB.SI('Données Globales'!K:K;">4")` | `globalIndicators` |
+| Synthèse par Équipe | `=NB.SI.ENS(E:E;équipe;M:M;priorité)`, Total, Total Général | `summaryByTeam` |
+| Feuilles équipe | `=NB.SI.ENS(E:E;équipe;F:F;rame;M:M;priorité)`, Total | `teamAnalysis` |
 
-**Preuve de conformité.** `tests/conformite-excel.test.ts` lit la feuille « Données Globales » du classeur de
+**Preuve de conformité.** `tests/excel-conformity.test.ts` lit la feuille « Données Globales » du classeur de
 référence avec la chaîne de l'application, recalcule tout, et compare **chaque cellule calculée** du Tableau de Bord
 et des dix feuilles équipe aux valeurs d'Excel. Pour rejouer la preuve sur une version plus récente du classeur,
-remplacez `tests/fixtures/classeur-reference.xlsx` et lancez `npm test`.
+remplacez `tests/fixtures/reference-workbook.xlsx` et lancez `npm test`.
 
 ### Ce qui est plus robuste que dans Excel
 
@@ -125,13 +125,13 @@ remplacez `tests/fixtures/classeur-reference.xlsx` et lancez `npm test`.
   apparaissent d'office (page, ligne de tableau, entrée de menu), après celles de `config.json`.
 - **Colonnes repérées par leur nom d'en-tête**, pas par leur position : l'ordre peut changer.
 
-### Jours ouvrés (`donnees.joursOuvres`)
+### Jours ouvrés (`data.businessDays`)
 
 La priorité dépend de la colonne « Jours Ouvrés Écoulés ». Dans le classeur c'est une valeur, pas une formule.
 
 - `auto` (défaut) : la valeur du fichier si elle existe, sinon calcul depuis « Date de création » ;
-- `fichier` : uniquement la valeur du fichier ;
-- `calcul` : toujours recalculée — `NB.JOURS.OUVRES(création; aujourd'hui) - 1`, hors week-ends et jours fériés français.
+- `file` : uniquement la valeur du fichier ;
+- `computed` : toujours recalculée — `NB.JOURS.OUVRES(création; aujourd'hui) - 1`, hors week-ends et jours fériés français.
 
 ### Lignes fragmentées
 
@@ -159,10 +159,10 @@ couleurs à l'œil ([src/theme/palette.ts](src/theme/palette.ts), [src/styles/to
 ```
 public/config.json        Configuration lue à l'exécution (listes, options) — versionné : jamais de vrai token
 public/config.local.json  Surcharge locale (vraie URL, vrai token) — ignoré par git ; modèle : config.local.example.json
-dev-server/serveurCle.ts  Plugin Vite : API clé simulée + relais anti-CORS
+dev-server/cleServer.ts   Plugin Vite : API clé simulée + relais anti-CORS
 src/config/               Chargement et validation de config.json
-src/services/apiCle.ts    GET authentifié par JWT → classeur
-src/services/lectureExcel.ts  Classeur → anomalies (SheetJS, chargé à la demande)
+src/services/cleApi.ts    GET authentifié par JWT → classeur
+src/services/excelReader.ts  Classeur → anomalies (SheetJS, chargé à la demande)
 src/domain/               Règles métier pures : priorité, jours ouvrés, indicateurs
 src/stores/anomalies.ts   État central (Pinia) ; les indicateurs sont des valeurs dérivées
 src/views/                Tableau de bord, page équipe (un composant pour toutes les équipes)
@@ -170,9 +170,13 @@ src/components/           Graphique, tableaux, tuiles, mise en page
 tests/                    Conformité Excel + tests unitaires
 ```
 
+**Convention de langue.** Le code est en anglais : identifiants, commentaires, tests, clés de configuration, classes
+CSS. L'interface de l'application (textes affichés, messages d'erreur) et cette documentation sont en français, comme
+les données du classeur (noms de colonnes, priorités « Mineure / Majeure / Bloquante »).
+
 ## Données personnelles
 
-`mock/export-cle.xlsx` et `tests/fixtures/classeur-reference.xlsx` contiennent des données réelles (noms d'agents).
+`mock/cle-export.xlsx` et `tests/fixtures/reference-workbook.xlsx` contiennent des données réelles (noms d'agents).
 Ils sont exclus par `.gitignore` : ne les versionnez pas.
 
 ## Dépendances notables

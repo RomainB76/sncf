@@ -1,193 +1,193 @@
 /**
- * État central de l'application.
+ * Central state of the application.
  *
- * Chaîne de traitement : config.json → GET clé (JWT) → lecture du classeur → anomalies.
- * Tous les indicateurs sont des valeurs dérivées (computed) de la liste d'anomalies :
- * comme dans Excel, il suffit de remplacer les données pour que tout se mette à jour.
+ * Pipeline: config.json → clé GET (JWT) → workbook reading → anomalies.
+ * Every indicator is a derived value (computed) of the anomaly list: as in Excel,
+ * replacing the data is enough for everything to update.
  */
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import {
-  chargerConfiguration,
-  ErreurConfiguration,
+  ConfigurationError,
+  loadConfiguration,
   type Configuration,
 } from '@/config/configuration'
 import {
-  analyseEquipe,
-  indicateursGlobaux,
-  listerEquipes,
-  listerMachines,
-  syntheseParEquipe,
-} from '@/domain/indicateurs'
-import type { AnalyseEquipe, Anomalie, Equipe } from '@/domain/types'
-import { ErreurApi, telechargerExport } from '@/services/apiCle'
-import { ErreurLecture, lireClasseur, type ResultatLecture } from '@/services/lectureExcel'
+  globalIndicators,
+  listMachines,
+  listTeams,
+  summaryByTeam,
+  teamAnalysis,
+} from '@/domain/indicators'
+import type { Anomaly, Team, TeamAnalysis } from '@/domain/types'
+import { ApiError, downloadExport } from '@/services/cleApi'
+import { ReadError, readWorkbook, type ReadResult } from '@/services/excelReader'
 
-export type EtatChargement = 'initial' | 'chargement' | 'pret' | 'erreur'
+export type LoadingState = 'initial' | 'loading' | 'ready' | 'error'
 
-export interface SourceDonnees {
-  type: 'api' | 'fichier'
-  /** Nom du fichier reçu ou importé, s'il est connu. */
-  nom: string | null
-  feuille: string
-  recuLe: Date
+export interface DataSource {
+  type: 'api' | 'file'
+  /** Name of the received or imported file, when known. */
+  name: string | null
+  sheet: string
+  receivedAt: Date
 }
 
-export interface ErreurAffichable {
-  titre: string
+export interface DisplayableError {
+  title: string
   message: string
   detail?: string
 }
 
-function erreurAffichable(e: unknown): ErreurAffichable {
-  if (e instanceof ErreurApi) {
-    const titres: Record<ErreurApi['code'], string> = {
+function toDisplayableError(e: unknown): DisplayableError {
+  if (e instanceof ApiError) {
+    const titles: Record<ApiError['code'], string> = {
       CONFIGURATION: 'Configuration incomplète',
-      AUTHENTIFICATION: 'Authentification refusée',
+      AUTHENTICATION: 'Authentification refusée',
       HTTP: 'Erreur renvoyée par clé',
-      RESEAU: 'clé est injoignable',
-      DELAI: 'Délai dépassé',
+      NETWORK: 'clé est injoignable',
+      TIMEOUT: 'Délai dépassé',
       FORMAT: 'Réponse inattendue',
     }
-    return { titre: titres[e.code], message: e.message, detail: e.detail }
+    return { title: titles[e.code], message: e.message, detail: e.detail }
   }
-  if (e instanceof ErreurConfiguration) {
-    return { titre: 'Configuration invalide', message: e.message, detail: e.detail }
+  if (e instanceof ConfigurationError) {
+    return { title: 'Configuration invalide', message: e.message, detail: e.detail }
   }
-  if (e instanceof ErreurLecture) {
-    return { titre: 'Fichier illisible', message: e.message, detail: e.detail }
+  if (e instanceof ReadError) {
+    return { title: 'Fichier illisible', message: e.message, detail: e.detail }
   }
   return {
-    titre: 'Erreur inattendue',
+    title: 'Erreur inattendue',
     message: e instanceof Error ? e.message : String(e),
   }
 }
 
 export const useAnomaliesStore = defineStore('anomalies', () => {
   const configuration = shallowRef<Configuration | null>(null)
-  const anomalies = shallowRef<readonly Anomalie[]>([])
-  const etat = ref<EtatChargement>('initial')
-  /** `true` pendant un appel alors que des données sont déjà affichées (elles restent visibles). */
-  const enActualisation = ref(false)
-  const erreur = ref<ErreurAffichable | null>(null)
-  const source = shallowRef<SourceDonnees | null>(null)
-  const avertissements = ref<string[]>([])
-  const origineJours = ref<ResultatLecture['origineJours']>({ fichier: 0, calcul: 0, absent: 0 })
+  const anomalies = shallowRef<readonly Anomaly[]>([])
+  const state = ref<LoadingState>('initial')
+  /** `true` during a call while data is already displayed (it stays visible). */
+  const refreshing = ref(false)
+  const error = ref<DisplayableError | null>(null)
+  const source = shallowRef<DataSource | null>(null)
+  const warnings = ref<string[]>([])
+  const daysSourceCounts = ref<ReadResult['daysSourceCounts']>({ file: 0, computed: 0, missing: 0 })
 
-  let appelEnCours: AbortController | null = null
-  let minuteur: ReturnType<typeof setInterval> | null = null
+  let pendingCall: AbortController | null = null
+  let timer: ReturnType<typeof setInterval> | null = null
 
-  // --- Valeurs dérivées : l'équivalent des feuilles calculées du classeur ---
+  // --- Derived values: the equivalent of the computed sheets of the workbook ---
 
-  const equipes = computed<Equipe[]>(() =>
-    listerEquipes(anomalies.value, configuration.value?.equipes ?? []),
+  const teams = computed<Team[]>(() =>
+    listTeams(anomalies.value, configuration.value?.teams ?? []),
   )
-  const machines = computed(() => listerMachines(anomalies.value, configuration.value?.machines ?? []))
-  const indicateurs = computed(() => indicateursGlobaux(anomalies.value))
-  const synthese = computed(() => syntheseParEquipe(anomalies.value, equipes.value))
+  const machines = computed(() => listMachines(anomalies.value, configuration.value?.machines ?? []))
+  const indicators = computed(() => globalIndicators(anomalies.value))
+  const summary = computed(() => summaryByTeam(anomalies.value, teams.value))
 
-  const analysesParEquipe = computed(() => {
-    const resultat = new Map<string, AnalyseEquipe>()
-    for (const equipe of equipes.value) {
-      resultat.set(equipe.cle, analyseEquipe(anomalies.value, equipe.cle, machines.value))
+  const analysesByTeam = computed(() => {
+    const result = new Map<string, TeamAnalysis>()
+    for (const team of teams.value) {
+      result.set(team.key, teamAnalysis(anomalies.value, team.key, machines.value))
     }
-    return resultat
+    return result
   })
 
-  const aDesDonnees = computed(() => source.value !== null)
+  const hasData = computed(() => source.value !== null)
 
-  /** `true` tant que config.json pointe sur l'API simulée du serveur de développement. */
-  const estDemonstration = computed(() => configuration.value?.api.url.includes('mock-api/') ?? false)
+  /** `true` while config.json points to the mock API of the development server. */
+  const isDemo = computed(() => configuration.value?.api.url.includes('mock-api/') ?? false)
 
-  function equipeParSlug(slug: string): Equipe | undefined {
-    return equipes.value.find((e) => e.slug === slug)
+  function teamBySlug(slug: string): Team | undefined {
+    return teams.value.find((t) => t.slug === slug)
   }
 
-  function anomaliesDeLEquipe(cle: string): Anomalie[] {
-    return anomalies.value.filter((a) => a.equipeCle === cle)
+  function anomaliesOfTeam(key: string): Anomaly[] {
+    return anomalies.value.filter((a) => a.teamKey === key)
   }
 
-  // --- Chargement ---
+  // --- Loading ---
 
-  function appliquer(resultat: ResultatLecture, nouvelleSource: Omit<SourceDonnees, 'feuille'>): void {
-    anomalies.value = resultat.anomalies
-    avertissements.value = resultat.avertissements
-    origineJours.value = resultat.origineJours
-    source.value = { ...nouvelleSource, feuille: resultat.feuille }
-    erreur.value = null
-    etat.value = 'pret'
+  function apply(result: ReadResult, newSource: Omit<DataSource, 'sheet'>): void {
+    anomalies.value = result.anomalies
+    warnings.value = result.warnings
+    daysSourceCounts.value = result.daysSourceCounts
+    source.value = { ...newSource, sheet: result.sheet }
+    error.value = null
+    state.value = 'ready'
   }
 
-  function optionsDeLecture(config: Configuration) {
+  function readOptions(config: Configuration) {
     return {
-      feuille: config.donnees.feuille,
-      joursOuvres: config.donnees.joursOuvres,
-      exclureJoursFeries: config.donnees.exclureJoursFeries,
+      sheet: config.data.sheet,
+      businessDays: config.data.businessDays,
+      excludePublicHolidays: config.data.excludePublicHolidays,
     }
   }
 
-  async function executer(tache: (config: Configuration, signal: AbortSignal) => Promise<void>): Promise<void> {
-    appelEnCours?.abort()
-    const controleur = new AbortController()
-    appelEnCours = controleur
+  async function run(task: (config: Configuration, signal: AbortSignal) => Promise<void>): Promise<void> {
+    pendingCall?.abort()
+    const controller = new AbortController()
+    pendingCall = controller
 
-    if (aDesDonnees.value) enActualisation.value = true
-    else etat.value = 'chargement'
+    if (hasData.value) refreshing.value = true
+    else state.value = 'loading'
 
     try {
-      // Relue à chaque fois : un changement d'URL ou de token est pris en compte immédiatement.
-      const config = await chargerConfiguration()
+      // Reloaded every time: a change of URL or token is taken into account immediately.
+      const config = await loadConfiguration()
       configuration.value = config
-      planifierRafraichissement(config.rafraichissementAutoMinutes)
-      await tache(config, controleur.signal)
+      scheduleAutoRefresh(config.autoRefreshMinutes)
+      await task(config, controller.signal)
     } catch (e) {
-      if (controleur.signal.aborted) return
-      erreur.value = erreurAffichable(e)
-      // Des données déjà affichées restent à l'écran : l'erreur s'affiche en bandeau.
-      if (!aDesDonnees.value) etat.value = 'erreur'
+      if (controller.signal.aborted) return
+      error.value = toDisplayableError(e)
+      // Data already displayed stays on screen: the error shows up as a banner.
+      if (!hasData.value) state.value = 'error'
     } finally {
-      if (appelEnCours === controleur) {
-        appelEnCours = null
-        enActualisation.value = false
+      if (pendingCall === controller) {
+        pendingCall = null
+        refreshing.value = false
       }
     }
   }
 
-  /** Récupère l'export depuis clé et recalcule tous les indicateurs. */
-  function actualiser(): Promise<void> {
-    return executer(async (config, signal) => {
-      const exportCle = await telechargerExport(config.api, signal)
-      const resultat = await lireClasseur(exportCle.contenu, optionsDeLecture(config))
+  /** Fetches the export from clé and recomputes every indicator. */
+  function refresh(): Promise<void> {
+    return run(async (config, signal) => {
+      const cleExport = await downloadExport(config.api, signal)
+      const result = await readWorkbook(cleExport.content, readOptions(config))
       if (signal.aborted) return
-      appliquer(resultat, { type: 'api', nom: exportCle.nomFichier, recuLe: exportCle.recuLe })
+      apply(result, { type: 'api', name: cleExport.fileName, receivedAt: cleExport.receivedAt })
     })
   }
 
-  /** Charge un classeur choisi par l'utilisateur (secours quand clé est indisponible). */
-  function importerFichier(fichier: File): Promise<void> {
-    return executer(async (config, signal) => {
-      const resultat = await lireClasseur(await fichier.arrayBuffer(), optionsDeLecture(config))
+  /** Loads a workbook chosen by the user (fallback when clé is unavailable). */
+  function importFile(file: File): Promise<void> {
+    return run(async (config, signal) => {
+      const result = await readWorkbook(await file.arrayBuffer(), readOptions(config))
       if (signal.aborted) return
-      appliquer(resultat, { type: 'fichier', nom: fichier.name, recuLe: new Date() })
+      apply(result, { type: 'file', name: file.name, receivedAt: new Date() })
     })
   }
 
-  function fermerErreur(): void {
-    if (aDesDonnees.value) erreur.value = null
+  function dismissError(): void {
+    if (hasData.value) error.value = null
   }
 
-  // --- Actualisation automatique (optionnelle, utile sur un écran d'atelier) ---
+  // --- Automatic refresh (optional, useful on a workshop screen) ---
 
-  let minutesPlanifiees = 0
-  function planifierRafraichissement(minutes: number): void {
-    if (minutes === minutesPlanifiees) return
-    minutesPlanifiees = minutes
-    if (minuteur !== null) clearInterval(minuteur)
-    minuteur = null
+  let scheduledMinutes = 0
+  function scheduleAutoRefresh(minutes: number): void {
+    if (minutes === scheduledMinutes) return
+    scheduledMinutes = minutes
+    if (timer !== null) clearInterval(timer)
+    timer = null
     if (minutes > 0) {
-      minuteur = setInterval(() => {
-        // Un fichier importé à la main n'est pas écrasé par une actualisation automatique.
-        if (source.value?.type !== 'fichier' && appelEnCours === null) void actualiser()
+      timer = setInterval(() => {
+        // A file imported by hand is never overwritten by an automatic refresh.
+        if (source.value?.type !== 'file' && pendingCall === null) void refresh()
       }, minutes * 60_000)
     }
   }
@@ -195,23 +195,23 @@ export const useAnomaliesStore = defineStore('anomalies', () => {
   return {
     configuration,
     anomalies,
-    etat,
-    enActualisation,
-    erreur,
+    state,
+    refreshing,
+    error,
     source,
-    avertissements,
-    origineJours,
-    equipes,
+    warnings,
+    daysSourceCounts,
+    teams,
     machines,
-    indicateurs,
-    synthese,
-    analysesParEquipe,
-    aDesDonnees,
-    estDemonstration,
-    equipeParSlug,
-    anomaliesDeLEquipe,
-    actualiser,
-    importerFichier,
-    fermerErreur,
+    indicators,
+    summary,
+    analysesByTeam,
+    hasData,
+    isDemo,
+    teamBySlug,
+    anomaliesOfTeam,
+    refresh,
+    importFile,
+    dismissError,
   }
 })

@@ -1,58 +1,58 @@
 /**
- * Thème clair / sombre. « auto » suit le système ; le choix explicite est mémorisé dans le
- * navigateur (simple préférence d'affichage, aucune donnée métier n'est stockée).
+ * Light / dark theme. « auto » follows the system; an explicit choice is remembered in the
+ * browser (a mere display preference, no business data is stored).
  */
 import { computed, readonly, ref } from 'vue'
-import type { NomTheme } from '@/theme/palette'
+import type { ThemeName } from '@/theme/palette'
 
-export type PreferenceTheme = 'auto' | NomTheme
+export type ThemePreference = 'auto' | ThemeName
 
-const CLE_STOCKAGE = 'suivi-anomalies:theme'
+const STORAGE_KEY = 'anomaly-tracking:theme'
 
-function lirePreference(): PreferenceTheme {
+function readPreference(): ThemePreference {
   try {
-    const valeur = localStorage.getItem(CLE_STOCKAGE)
-    return valeur === 'light' || valeur === 'dark' ? valeur : 'auto'
+    const value = localStorage.getItem(STORAGE_KEY)
+    return value === 'light' || value === 'dark' ? value : 'auto'
   } catch {
     return 'auto'
   }
 }
 
-const requeteSombre =
+const darkQuery =
   typeof window !== 'undefined' && typeof window.matchMedia === 'function'
     ? window.matchMedia('(prefers-color-scheme: dark)')
     : null
 
-const preference = ref<PreferenceTheme>(lirePreference())
-const systemeSombre = ref(requeteSombre?.matches ?? false)
-requeteSombre?.addEventListener('change', (e) => {
-  systemeSombre.value = e.matches
+const preference = ref<ThemePreference>(readPreference())
+const systemDark = ref(darkQuery?.matches ?? false)
+darkQuery?.addEventListener('change', (e) => {
+  systemDark.value = e.matches
 })
 
-const themeEffectif = computed<NomTheme>(() =>
-  preference.value === 'auto' ? (systemeSombre.value ? 'dark' : 'light') : preference.value,
+const effectiveTheme = computed<ThemeName>(() =>
+  preference.value === 'auto' ? (systemDark.value ? 'dark' : 'light') : preference.value,
 )
 
-function definirTheme(valeur: PreferenceTheme): void {
-  preference.value = valeur
-  const racine = document.documentElement
-  if (valeur === 'auto') racine.removeAttribute('data-theme')
-  else racine.setAttribute('data-theme', valeur)
+function setTheme(value: ThemePreference): void {
+  preference.value = value
+  const root = document.documentElement
+  if (value === 'auto') root.removeAttribute('data-theme')
+  else root.setAttribute('data-theme', value)
   try {
-    if (valeur === 'auto') localStorage.removeItem(CLE_STOCKAGE)
-    else localStorage.setItem(CLE_STOCKAGE, valeur)
+    if (value === 'auto') localStorage.removeItem(STORAGE_KEY)
+    else localStorage.setItem(STORAGE_KEY, value)
   } catch {
-    /* stockage indisponible (navigation privée) : le choix vaut pour la session */
+    /* storage unavailable (private browsing): the choice holds for the session */
   }
 }
 
-const SUIVANT: Record<PreferenceTheme, PreferenceTheme> = { auto: 'light', light: 'dark', dark: 'auto' }
+const NEXT: Record<ThemePreference, ThemePreference> = { auto: 'light', light: 'dark', dark: 'auto' }
 
 export function useTheme() {
   return {
     preference: readonly(preference),
-    themeEffectif,
-    definirTheme,
-    themeSuivant: () => definirTheme(SUIVANT[preference.value]),
+    effectiveTheme,
+    setTheme,
+    nextTheme: () => setTheme(NEXT[preference.value]),
   }
 }

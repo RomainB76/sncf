@@ -1,7 +1,7 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
-// Les tests portent sur la couche métier (pure TypeScript) : l'environnement Node suffit.
+// The tests cover the business layer (pure TypeScript): the Node environment is enough.
 export default defineConfig({
   resolve: {
     alias: {

@@ -1,16 +1,16 @@
 {
   "api": {
-    "url": "/mock-api/export-anomalies",
+    "url": "/mock-api/anomalies-export",
     "jwtToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vIiwiYXVkIjoibW9jay1jbGUiLCJub3RlIjoiamV0b24gZGUgZGVtb25zdHJhdGlvbiAtIGEgcmVtcGxhY2VyIn0.signature-de-demonstration",
     "viaProxy": false,
     "timeoutMs": 30000
   },
-  "donnees": {
-    "feuille": "Données Globales",
-    "joursOuvres": "auto",
-    "exclureJoursFeries": true
+  "data": {
+    "sheet": "Données Globales",
+    "businessDays": "auto",
+    "excludePublicHolidays": true
   },
-  "equipes": [
+  "teams": [
     "AFFAIRES",
     "CHAUDRO",
     "DEMONTAGE",
@@ -23,5 +23,5 @@
     "PIECES DEPOSEES"
   ],
   "machines": ["Z27575", "Z27665", "X76605", "X76611"],
-  "rafraichissementAutoMinutes": 0
+  "autoRefreshMinutes": 0
 }

@@ -1,16 +1,16 @@
-# Dépendances et build
+# Dependencies and build output
 node_modules/
 dist/
 *.tsbuildinfo
 
-# Données réelles (noms d'agents, anomalies) : ne jamais versionner
+# Real data (names of agents, anomalies): never commit
 mock/*.xlsx
 tests/fixtures/*.xlsx
 
-# Configuration locale contenant un vrai token JWT
+# Local configuration holding a real JWT token
 public/config.local.json
 
-# Outils
+# Tooling
 .vscode/*
 !.vscode/extensions.json
 .idea/

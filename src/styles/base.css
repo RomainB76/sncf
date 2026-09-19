@@ -51,7 +51,7 @@ table {
   border-radius: var(--radius-s);
 }
 
-.visuellement-masque {
+.visually-hidden {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -71,11 +71,11 @@ table {
   padding: 28px 28px 48px;
 }
 
-.page__entete {
+.page__header {
   margin-bottom: 22px;
 }
 
-.page__surtitre {
+.page__kicker {
   margin-bottom: 2px;
   color: var(--text-muted);
   font-size: 12px;
@@ -84,21 +84,21 @@ table {
   text-transform: uppercase;
 }
 
-.page__titre {
+.page__title {
   font-size: 26px;
   font-weight: 680;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
 
-.page__sous-titre {
+.page__subtitle {
   margin-top: 4px;
   color: var(--text-secondary);
   font-size: 14px;
 }
 
-/* Graphique et tableau côte à côte sur grand écran, l'un sous l'autre sinon. */
-.page__grille {
+/* Chart and table side by side on a large screen, stacked otherwise. */
+.page__grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 20px;
@@ -106,7 +106,7 @@ table {
 }
 
 @media (max-width: 1560px) {
-  .page__grille {
+  .page__grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -117,9 +117,9 @@ table {
   }
 }
 
-/* ---------- Carte ---------- */
+/* ---------- Card ---------- */
 
-.carte {
+.card {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-l);
@@ -127,7 +127,7 @@ table {
   min-width: 0;
 }
 
-.carte__entete {
+.card__header {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -136,25 +136,25 @@ table {
   padding: 18px 20px 0;
 }
 
-.carte__titre {
+.card__title {
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.005em;
 }
 
-.carte__sous-titre {
+.card__subtitle {
   margin-top: 2px;
   font-size: 13px;
   color: var(--text-secondary);
 }
 
-.carte__corps {
+.card__body {
   padding: 14px 20px 20px;
 }
 
-/* ---------- Boutons ---------- */
+/* ---------- Buttons ---------- */
 
-.bouton {
+.button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -174,82 +174,82 @@ table {
     border-color 0.15s;
 }
 
-.bouton:hover:not(:disabled) {
+.button:hover:not(:disabled) {
   background: var(--surface-2);
 }
 
-.bouton:disabled {
+.button:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.bouton--primaire {
+.button--primary {
   border-color: transparent;
   background: var(--primary-bg);
   color: var(--on-accent);
 }
 
-.bouton--primaire:hover:not(:disabled) {
+.button--primary:hover:not(:disabled) {
   background: var(--primary-bg);
   filter: brightness(1.1);
 }
 
-.bouton--icone {
+.button--icon {
   width: 36px;
   padding: 0;
 }
 
-/* ---------- Pastille de criticité (la couleur accompagne toujours un libellé) ---------- */
+/* ---------- Severity dot (the colour always goes with a label) ---------- */
 
-.pastille {
+.dot {
   display: inline-block;
   flex: none;
   width: 10px;
   height: 10px;
   border-radius: 3px;
-  background: var(--sev-neutre);
+  background: var(--sev-neutral);
 }
 
-.pastille--mineure {
-  background: var(--sev-mineure);
+.dot--minor {
+  background: var(--sev-minor);
 }
 
-.pastille--majeure {
-  background: var(--sev-majeure);
+.dot--major {
+  background: var(--sev-major);
 }
 
-.pastille--bloquante {
-  background: var(--sev-bloquante);
+.dot--blocking {
+  background: var(--sev-blocking);
 }
 
-/* Motifs d'accessibilité actifs : les pastilles et la barre de répartition portent les mêmes
-   hachures que les graphiques (45° pour Majeure, 135° pour Bloquante ; Mineure reste unie). */
-:root[data-motifs] .pastille--majeure,
-:root[data-motifs] .repartition__segment--majeure {
+/* Accessibility patterns on: the dots and the breakdown bar carry the same hatching as the
+   charts (45° for Major, 135° for Blocking; Minor stays plain). */
+:root[data-patterns] .dot--major,
+:root[data-patterns] .breakdown__segment--major {
   background-image: repeating-linear-gradient(45deg, transparent 0 2.5px, rgba(0, 0, 0, 0.42) 2.5px 4px);
 }
 
-:root[data-motifs] .pastille--bloquante,
-:root[data-motifs] .repartition__segment--bloquante {
+:root[data-patterns] .dot--blocking,
+:root[data-patterns] .breakdown__segment--blocking {
   background-image: repeating-linear-gradient(135deg, transparent 0 1.5px, rgba(0, 0, 0, 0.45) 1.5px 3px);
 }
 
-/* ---------- Infobulle des graphiques (DOM créé par ECharts, hors composants Vue) ---------- */
+/* ---------- Chart tooltip (DOM created by ECharts, outside the Vue components) ---------- */
 
-.infobulle {
+.tooltip {
   min-width: 190px;
   padding: 12px 14px;
   font-family: var(--font-sans);
   color: var(--text-primary);
 }
 
-.infobulle__titre {
+.tooltip__title {
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 650;
 }
 
-.infobulle__ligne {
+.tooltip__row {
   display: grid;
   grid-template-columns: 14px 1fr auto auto;
   align-items: center;
@@ -258,23 +258,23 @@ table {
   font-size: 13px;
 }
 
-.infobulle__cle {
+.tooltip__swatch {
   width: 14px;
   height: 3px;
   border-radius: 2px;
 }
 
-.infobulle__nom {
+.tooltip__name {
   color: var(--text-secondary);
 }
 
-.infobulle__valeur {
+.tooltip__value {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
-.infobulle__part {
+.tooltip__share {
   min-width: 38px;
   color: var(--text-muted);
   font-size: 12px;
@@ -282,7 +282,7 @@ table {
   text-align: right;
 }
 
-.infobulle__total {
+.tooltip__total {
   display: flex;
   justify-content: space-between;
   margin-top: 8px;
@@ -292,12 +292,12 @@ table {
   color: var(--text-secondary);
 }
 
-.infobulle__total strong {
+.tooltip__total strong {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
-.infobulle__aide {
+.tooltip__hint {
   margin-top: 8px;
   font-size: 12px;
   color: var(--text-muted);

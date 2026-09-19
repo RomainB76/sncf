@@ -1,8 +1,8 @@
 {
-  "name": "suivi-anomalies",
+  "name": "anomaly-tracking",
   "version": "1.0.0",
   "private": true,
-  "description": "Tableau de bord de suivi des anomalies industrielles (remplace le classeur Excel alimenté par l'export clé)",
+  "description": "Industrial anomaly tracking dashboard (replaces the Excel workbook fed by the clé export)",
   "type": "module",
   "scripts": {
     "dev": "vite",
