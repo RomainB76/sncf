@@ -1,50 +1,60 @@
 /**
- * Configuration de l'application, lue à l'exécution dans `public/config.json`.
+ * Application configuration, read at runtime from `public/config.json`.
  *
- * Le fichier n'est PAS compilé dans le bundle : on peut changer l'URL ou le token sans
- * reconstruire l'application, y compris une fois déployée (il suffit d'actualiser les données).
+ * The file is NOT compiled into the bundle: the URL or the token can change without rebuilding
+ * the application, even once deployed (refreshing the data is enough).
+ *
+ * A `config.local.json` file placed next to it overrides `config.json` (see `mergeConfiguration`).
+ * It is excluded from the repository by .gitignore: that is where the real API URL and the real
+ * JWT token go, never in `config.json`, which is versioned in a public repository.
  */
-import type { ModeJoursOuvres } from '@/services/lectureExcel'
+import type { BusinessDaysMode } from '@/services/excelReader'
 
-export interface ConfigurationApi {
-  /** URL du GET renvoyant le classeur Excel exporté par clé. */
+export interface ApiConfiguration {
+  /** URL of the GET returning the Excel workbook exported by clé. */
   url: string
-  /** Token JWT, envoyé dans l'en-tête `Authorization: Bearer <token>`. */
+  /** JWT token, sent in the `Authorization: Bearer <token>` header. */
   jwtToken: string
   /**
-   * `true` : l'appel passe par le relais `/proxy-cle` du serveur Vite (dev et preview),
-   * ce qui contourne l'absence d'en-têtes CORS côté clé. `false` : appel direct depuis le navigateur.
+   * `true`: the call goes through the `/cle-proxy` relay of the Vite server (dev and preview),
+   * which works around the missing CORS headers on the clé side. `false`: direct call from the browser.
    */
   viaProxy: boolean
-  /** Délai maximal de l'appel, en millisecondes. */
+  /** Maximum duration of the call, in milliseconds. */
   timeoutMs: number
 }
 
-export interface ConfigurationDonnees {
-  /** Feuille à lire dans le classeur reçu (à défaut : la première). */
-  feuille: string
-  joursOuvres: ModeJoursOuvres
-  exclureJoursFeries: boolean
+export interface DataConfiguration {
+  /** Sheet to read in the received workbook (defaults to the first one). */
+  sheet: string
+  businessDays: BusinessDaysMode
+  excludePublicHolidays: boolean
 }
 
 export interface Configuration {
-  api: ConfigurationApi
-  donnees: ConfigurationDonnees
-  /** Équipes du classeur d'origine, dans l'ordre des feuilles. Les équipes nouvelles s'ajoutent d'office. */
-  equipes: string[]
-  /** Rames listées dans chaque tableau d'équipe. Les rames nouvelles s'ajoutent d'office. */
+  api: ApiConfiguration
+  data: DataConfiguration
+  /** Teams of the original workbook, in sheet order. New teams are added automatically. */
+  teams: string[]
+  /** Trainsets listed in every team table. New trainsets are added automatically. */
   machines: string[]
-  /** Actualisation automatique, en minutes (0 = désactivée). */
-  rafraichissementAutoMinutes: number
+  /** Automatic refresh, in minutes (0 = disabled). */
+  autoRefreshMinutes: number
 }
 
-/** Chemin du relais anti-CORS exposé par le serveur Vite (voir dev-server/serveurCle.ts). */
-export const CHEMIN_PROXY = 'proxy-cle'
+/** Path of the anti-CORS relay exposed by the Vite server (see dev-server/cleServer.ts). */
+export const PROXY_PATH = 'cle-proxy'
 
-export const CONFIGURATION_PAR_DEFAUT: Configuration = {
+/** Main configuration file, versioned: must never contain a real token. */
+export const CONFIG_FILE = 'config.json'
+
+/** Optional local override, excluded from the repository by .gitignore. */
+export const LOCAL_CONFIG_FILE = 'config.local.json'
+
+export const DEFAULT_CONFIGURATION: Configuration = {
   api: { url: '', jwtToken: '', viaProxy: false, timeoutMs: 30_000 },
-  donnees: { feuille: 'Données Globales', joursOuvres: 'auto', exclureJoursFeries: true },
-  equipes: [
+  data: { sheet: 'Données Globales', businessDays: 'auto', excludePublicHolidays: true },
+  teams: [
     'AFFAIRES',
     'CHAUDRO',
     'DEMONTAGE',
@@ -57,113 +67,178 @@ export const CONFIGURATION_PAR_DEFAUT: Configuration = {
     'PIECES DEPOSEES',
   ],
   machines: ['Z27575', 'Z27665', 'X76605', 'X76611'],
-  rafraichissementAutoMinutes: 0,
+  autoRefreshMinutes: 0,
 }
 
-export class ErreurConfiguration extends Error {
+export class ConfigurationError extends Error {
   constructor(
     message: string,
     public readonly detail?: string,
   ) {
     super(message)
-    this.name = 'ErreurConfiguration'
+    this.name = 'ConfigurationError'
   }
 }
 
-function objet(valeur: unknown): Record<string, unknown> {
-  return valeur !== null && typeof valeur === 'object' && !Array.isArray(valeur)
-    ? (valeur as Record<string, unknown>)
+function asObject(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
     : {}
 }
 
-function texte(valeur: unknown, defaut: string): string {
-  return typeof valeur === 'string' ? valeur.trim() : defaut
+function asText(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value.trim() : fallback
 }
 
-function booleen(valeur: unknown, defaut: boolean): boolean {
-  return typeof valeur === 'boolean' ? valeur : defaut
+function asBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
 }
 
-function nombrePositif(valeur: unknown, defaut: number): number {
-  return typeof valeur === 'number' && Number.isFinite(valeur) && valeur >= 0 ? valeur : defaut
+function asNonNegativeNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : fallback
 }
 
-function listeDeTextes(valeur: unknown, defaut: string[]): string[] {
-  if (!Array.isArray(valeur)) return defaut
-  const liste = valeur.filter((v): v is string => typeof v === 'string' && v.trim() !== '')
-  return liste.map((v) => v.trim())
+function asTextList(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) return fallback
+  const list = value.filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+  return list.map((v) => v.trim())
 }
 
-/** Valide un contenu JSON et complète les valeurs absentes par les valeurs par défaut. */
-export function interpreterConfiguration(brut: unknown): Configuration {
-  const racine = objet(brut)
-  const api = objet(racine.api)
-  const donnees = objet(racine.donnees)
-  const defaut = CONFIGURATION_PAR_DEFAUT
+/** Validates a JSON content and fills in the missing values with the defaults. */
+export function parseConfiguration(raw: unknown): Configuration {
+  const root = asObject(raw)
+  const api = asObject(root.api)
+  const data = asObject(root.data)
+  const defaults = DEFAULT_CONFIGURATION
 
-  const mode = texte(donnees.joursOuvres, defaut.donnees.joursOuvres)
-  if (mode !== 'auto' && mode !== 'fichier' && mode !== 'calcul') {
-    throw new ErreurConfiguration(
-      `config.json : « donnees.joursOuvres » vaut « ${mode} ».`,
-      'Valeurs acceptées : "auto", "fichier" ou "calcul".',
+  const mode = asText(data.businessDays, defaults.data.businessDays)
+  if (mode !== 'auto' && mode !== 'file' && mode !== 'computed') {
+    throw new ConfigurationError(
+      `config.json : « data.businessDays » vaut « ${mode} ».`,
+      'Valeurs acceptées : "auto", "file" ou "computed".',
     )
   }
 
   return {
     api: {
-      url: texte(api.url, defaut.api.url),
-      jwtToken: texte(api.jwtToken, defaut.api.jwtToken),
-      viaProxy: booleen(api.viaProxy, defaut.api.viaProxy),
-      timeoutMs: nombrePositif(api.timeoutMs, defaut.api.timeoutMs) || defaut.api.timeoutMs,
+      url: asText(api.url, defaults.api.url),
+      jwtToken: asText(api.jwtToken, defaults.api.jwtToken),
+      viaProxy: asBoolean(api.viaProxy, defaults.api.viaProxy),
+      timeoutMs: asNonNegativeNumber(api.timeoutMs, defaults.api.timeoutMs) || defaults.api.timeoutMs,
     },
-    donnees: {
-      feuille: texte(donnees.feuille, defaut.donnees.feuille),
-      joursOuvres: mode,
-      exclureJoursFeries: booleen(donnees.exclureJoursFeries, defaut.donnees.exclureJoursFeries),
+    data: {
+      sheet: asText(data.sheet, defaults.data.sheet),
+      businessDays: mode,
+      excludePublicHolidays: asBoolean(data.excludePublicHolidays, defaults.data.excludePublicHolidays),
     },
-    equipes: listeDeTextes(racine.equipes, defaut.equipes),
-    machines: listeDeTextes(racine.machines, defaut.machines),
-    rafraichissementAutoMinutes: nombrePositif(
-      racine.rafraichissementAutoMinutes,
-      defaut.rafraichissementAutoMinutes,
-    ),
+    teams: asTextList(root.teams, defaults.teams),
+    machines: asTextList(root.machines, defaults.machines),
+    autoRefreshMinutes: asNonNegativeNumber(root.autoRefreshMinutes, defaults.autoRefreshMinutes),
   }
 }
 
-/** URL d'une ressource servie à côté de index.html (compatible avec un déploiement en sous-dossier). */
-export function urlRessource(chemin: string): string {
-  return new URL(chemin, document.baseURI).toString()
+/**
+ * Applies an override (`config.local.json`) on top of a configuration (`config.json`):
+ * the `api` and `data` objects are merged key by key; the other top-level values, including
+ * the `teams` and `machines` lists, are replaced as a whole when the override defines them.
+ * An override (or a section) that is not an object is ignored.
+ */
+export function mergeConfiguration(base: unknown, override: unknown): Record<string, unknown> {
+  const origin = asObject(base)
+  const local = asObject(override)
+  const result: Record<string, unknown> = { ...origin, ...local }
+  for (const section of ['api', 'data'] as const) {
+    if (section in local) result[section] = { ...asObject(origin[section]), ...asObject(local[section]) }
+  }
+  return result
 }
 
-/**
- * Charge `config.json`. Rechargé à chaque actualisation des données, pour qu'un changement
- * d'URL ou de token soit pris en compte sans redémarrer quoi que ce soit.
- */
-export async function chargerConfiguration(): Promise<Configuration> {
-  let reponse: Response
+/** URL of a resource served next to index.html (works when deployed in a sub-folder). */
+export function resourceUrl(path: string): string {
+  return new URL(path, document.baseURI).toString()
+}
+
+/** Loads and decodes `config.json`; every failure is an explicit error, displayed to the user. */
+async function loadConfigJson(): Promise<unknown> {
+  let response: Response
   try {
-    reponse = await fetch(urlRessource('config.json'), { cache: 'no-store' })
+    response = await fetch(resourceUrl(CONFIG_FILE), { cache: 'no-store' })
   } catch (e) {
-    throw new ErreurConfiguration(
+    throw new ConfigurationError(
       'Impossible de charger le fichier de configuration config.json.',
       e instanceof Error ? e.message : String(e),
     )
   }
-  if (!reponse.ok) {
-    throw new ErreurConfiguration(
-      `Fichier de configuration introuvable (config.json : HTTP ${reponse.status}).`,
+  if (!response.ok) {
+    throw new ConfigurationError(
+      `Fichier de configuration introuvable (config.json : HTTP ${response.status}).`,
       'Il doit se trouver dans le dossier public/ (à côté de index.html une fois l’application construite).',
     )
   }
 
-  let brut: unknown
   try {
-    brut = await reponse.json()
+    return (await response.json()) as unknown
   } catch (e) {
-    throw new ErreurConfiguration(
+    throw new ConfigurationError(
       'Le fichier config.json n’est pas un JSON valide.',
       e instanceof Error ? e.message : String(e),
     )
   }
-  return interpreterConfiguration(brut)
+}
+
+/**
+ * Loads the local override `config.local.json`, or returns `undefined` when there is none.
+ *
+ * Silently ignored: a missing file (404), an unreachable network and an HTML page returned
+ * with a 200 status (in dev, the Vite server returns index.html for any missing file).
+ * A file that exists but is not a valid JSON object is ignored too, with a console warning:
+ * the application carries on with `config.json` alone.
+ */
+async function loadLocalOverride(): Promise<unknown> {
+  let response: Response
+  try {
+    // Explicitly asking for JSON already avoids the index.html fallback of the Vite server (it
+    // then answers 404), but the content is checked in every case: another server may do the same.
+    response = await fetch(resourceUrl(LOCAL_CONFIG_FILE), {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    })
+  } catch {
+    return undefined
+  }
+  if (!response.ok) return undefined
+
+  let content: string
+  try {
+    content = await response.text()
+  } catch {
+    return undefined
+  }
+  const contentType = response.headers.get('content-type') ?? ''
+  if (contentType.includes('text/html') || content.trimStart().startsWith('<')) return undefined
+
+  let value: unknown
+  try {
+    value = JSON.parse(content)
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e)
+    console.warn(`${LOCAL_CONFIG_FILE} is ignored: it is not valid JSON (${detail}).`)
+    return undefined
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    console.warn(`${LOCAL_CONFIG_FILE} is ignored: a JSON object is expected.`)
+    return undefined
+  }
+  return value
+}
+
+/**
+ * Loads `config.json`, then `config.local.json` when it exists (its values win, see
+ * `mergeConfiguration`). Reloaded on every data refresh, so that a change of URL or token
+ * is taken into account without restarting anything.
+ */
+export async function loadConfiguration(): Promise<Configuration> {
+  const raw = await loadConfigJson()
+  const local = await loadLocalOverride()
+  return parseConfiguration(local === undefined ? raw : mergeConfiguration(raw, local))
 }

@@ -1,82 +1,82 @@
 /**
- * Couleurs des graphiques. ECharts dessine dans un canvas/SVG et a besoin de valeurs concrètes :
- * ce fichier duplique volontairement les jetons de src/styles/tokens.css.
+ * Chart colours. ECharts draws in a canvas/SVG and needs concrete values: this file deliberately
+ * duplicates the tokens of src/styles/tokens.css.
  *
- * Criticité = couleurs de STATUT (vert / ambre / rouge, comme dans le classeur), mais pas celles
- * d'Excel : le vert #2ECC71 et le rouge #E74C3C d'origine sont indiscernables pour un daltonien
- * deutéranope (ΔE 4), alors qu'ils se touchent dès qu'une équipe n'a aucune « Majeure ».
- * Le trio ci-dessous passe les contrôles toutes-paires (daltonisme ≥ 9, vision normale ≥ 16)
- * dans les deux thèmes. En thème clair, l'ambre et le vert ont un contraste < 3:1 sur le fond :
- * c'est compensé par les étiquettes directes et par le tableau toujours affiché à côté.
+ * Severity = STATUS colours (green / amber / red, as in the workbook), but not the Excel ones:
+ * the original green #2ECC71 and red #E74C3C are indistinguishable for a deuteranope
+ * colour-blind person (ΔE 4), while they touch as soon as a team has no « Majeure ».
+ * The trio below passes the all-pairs checks (colour blindness ≥ 9, normal vision ≥ 16)
+ * in both themes. In the light theme, amber and green have a contrast < 3:1 on the background:
+ * this is compensated by the direct labels and by the table always displayed next to the chart.
  */
-import type { Priorite } from '@/domain/types'
+import type { Priority } from '@/domain/types'
 
-export type NomTheme = 'light' | 'dark'
+export type ThemeName = 'light' | 'dark'
 
-export interface PaletteGraphique {
+export interface ChartPalette {
   surface: string
-  textePrincipal: string
-  texteSecondaire: string
-  texteAttenue: string
-  grille: string
-  bandeSurvol: string
-  severite: Record<Priorite, string>
-  /** Teinte « soulevée » du segment survolé. */
-  severiteSurvol: Record<Priorite, string>
-  /** Encre des motifs d'accessibilité (ton sur ton, plus sombre que le remplissage). */
-  encreMotif: string
+  textPrimary: string
+  textSecondary: string
+  textMuted: string
+  gridline: string
+  hoverBand: string
+  severity: Record<Priority, string>
+  /** « Lifted » tint of the hovered segment. */
+  severityHover: Record<Priority, string>
+  /** Ink of the accessibility patterns (tone on tone, darker than the fill). */
+  patternInk: string
 }
 
-function melanger(hex: string, avec: string, part: number): string {
-  const lire = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
-  const a = lire(hex)
-  const b = lire(avec)
-  const canaux = a.map((canal, i) => Math.round(canal + ((b[i] ?? canal) - canal) * part))
-  return `#${canaux.map((c) => c.toString(16).padStart(2, '0')).join('')}`
+function mix(hex: string, withHex: string, share: number): string {
+  const read = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))
+  const a = read(hex)
+  const b = read(withHex)
+  const channels = a.map((channel, i) => Math.round(channel + ((b[i] ?? channel) - channel) * share))
+  return `#${channels.map((c) => c.toString(16).padStart(2, '0')).join('')}`
 }
 
-function palette(
-  base: Omit<PaletteGraphique, 'severiteSurvol'>,
-  versBlanc: number,
-): PaletteGraphique {
+function buildPalette(
+  base: Omit<ChartPalette, 'severityHover'>,
+  towardsWhite: number,
+): ChartPalette {
   return {
     ...base,
-    severiteSurvol: {
-      Mineure: melanger(base.severite.Mineure, '#ffffff', versBlanc),
-      Majeure: melanger(base.severite.Majeure, '#ffffff', versBlanc),
-      Bloquante: melanger(base.severite.Bloquante, '#ffffff', versBlanc),
+    severityHover: {
+      minor: mix(base.severity.minor, '#ffffff', towardsWhite),
+      major: mix(base.severity.major, '#ffffff', towardsWhite),
+      blocking: mix(base.severity.blocking, '#ffffff', towardsWhite),
     },
   }
 }
 
-export const PALETTES: Record<NomTheme, PaletteGraphique> = {
-  light: palette(
+export const PALETTES: Record<ThemeName, ChartPalette> = {
+  light: buildPalette(
     {
       surface: '#fcfcfb',
-      textePrincipal: '#0b0b0b',
-      texteSecondaire: '#52514e',
-      texteAttenue: '#6f6d68',
-      grille: '#e1e0d9',
-      bandeSurvol: 'rgba(11, 11, 11, 0.05)',
-      severite: { Mineure: '#1baf7a', Majeure: '#eda100', Bloquante: '#d03b3b' },
-      encreMotif: 'rgba(11, 11, 11, 0.38)',
+      textPrimary: '#0b0b0b',
+      textSecondary: '#52514e',
+      textMuted: '#6f6d68',
+      gridline: '#e1e0d9',
+      hoverBand: 'rgba(11, 11, 11, 0.05)',
+      severity: { minor: '#1baf7a', major: '#eda100', blocking: '#d03b3b' },
+      patternInk: 'rgba(11, 11, 11, 0.38)',
     },
     0.18,
   ),
-  dark: palette(
+  dark: buildPalette(
     {
       surface: '#1a1a19',
-      textePrincipal: '#ffffff',
-      texteSecondaire: '#c3c2b7',
-      texteAttenue: '#a09e96',
-      grille: '#2c2c2a',
-      bandeSurvol: 'rgba(255, 255, 255, 0.06)',
-      severite: { Mineure: '#1baf7a', Majeure: '#c98500', Bloquante: '#d03b3b' },
-      encreMotif: 'rgba(0, 0, 0, 0.45)',
+      textPrimary: '#ffffff',
+      textSecondary: '#c3c2b7',
+      textMuted: '#a09e96',
+      gridline: '#2c2c2a',
+      hoverBand: 'rgba(255, 255, 255, 0.06)',
+      severity: { minor: '#1baf7a', major: '#c98500', blocking: '#d03b3b' },
+      patternInk: 'rgba(0, 0, 0, 0.45)',
     },
     0.16,
   ),
 }
 
-export const POLICE_GRAPHIQUE =
+export const CHART_FONT =
   "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"

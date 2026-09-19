@@ -1,13 +1,13 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { serveurCle } from './dev-server/serveurCle.ts'
+import { cleServer } from './dev-server/cleServer.ts'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // Chemins relatifs : le build fonctionne depuis n'importe quel sous-dossier d'un serveur statique.
+  // Relative paths: the build works from any sub-folder of a static server.
   base: './',
-  plugins: [vue(), serveurCle()],
+  plugins: [vue(), cleServer()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -22,7 +22,7 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    // ECharts et SheetJS sont volumineux par nature ; ils sont isolés dans des chunks chargés à la demande.
+    // ECharts and SheetJS are large by nature; they are isolated in chunks loaded on demand.
     chunkSizeWarningLimit: 1200,
   },
 })

@@ -1,58 +1,58 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
-import EtatDonnees from '@/components/EtatDonnees.vue'
-import BarreLaterale from '@/components/layout/BarreLaterale.vue'
-import BarreOutils from '@/components/layout/BarreOutils.vue'
+import DataState from '@/components/DataState.vue'
+import Sidebar from '@/components/layout/Sidebar.vue'
+import Toolbar from '@/components/layout/Toolbar.vue'
 import { useAnomaliesStore } from '@/stores/anomalies'
 
 const store = useAnomaliesStore()
 const route = useRoute()
-const menuOuvert = ref(false)
+const menuOpen = ref(false)
 
 watch(
   () => route.fullPath,
   () => {
-    menuOuvert.value = false
+    menuOpen.value = false
   },
 )
 
-// Au démarrage : appel de clé, puis calcul des indicateurs.
+// On startup: call clé, then compute the indicators.
 onMounted(() => {
-  void store.actualiser()
+  void store.refresh()
 })
 </script>
 
 <template>
-  <a class="evitement" href="#contenu">Aller au contenu</a>
-  <BarreLaterale :ouverte="menuOuvert" @fermer="menuOuvert = false" />
+  <a class="skip-link" href="#content">Aller au contenu</a>
+  <Sidebar :open="menuOpen" @close="menuOpen = false" />
 
-  <div class="cadre">
-    <BarreOutils @ouvrir-menu="menuOuvert = true" />
-    <!-- Pendant une actualisation, l'affichage précédent reste en place, simplement atténué. -->
-    <main id="contenu" class="cadre__contenu" :class="{ 'cadre__contenu--actualisation': store.enActualisation }" tabindex="-1">
-      <RouterView v-if="store.aDesDonnees" />
-      <EtatDonnees v-else />
+  <div class="frame">
+    <Toolbar @open-menu="menuOpen = true" />
+    <!-- During a refresh, the previous display stays in place, merely dimmed. -->
+    <main id="content" class="frame__content" :class="{ 'frame__content--refreshing': store.refreshing }" tabindex="-1">
+      <RouterView v-if="store.hasData" />
+      <DataState v-else />
     </main>
   </div>
 </template>
 
 <style scoped>
-.cadre {
+.frame {
   min-height: 100vh;
   margin-left: var(--sidebar-width);
 }
 
-.cadre__contenu {
+.frame__content {
   outline: none;
   transition: opacity 0.2s;
 }
 
-.cadre__contenu--actualisation {
+.frame__content--refreshing {
   opacity: 0.55;
 }
 
-.evitement {
+.skip-link {
   position: fixed;
   top: 8px;
   left: 8px;
@@ -64,12 +64,12 @@ onMounted(() => {
   transform: translateY(-200%);
 }
 
-.evitement:focus {
+.skip-link:focus {
   transform: none;
 }
 
 @media (max-width: 960px) {
-  .cadre {
+  .frame {
     margin-left: 0;
   }
 }
