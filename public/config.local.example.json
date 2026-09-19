@@ -1,0 +1,6 @@
+{
+  "api": {
+    "url": "https://cle.exemple.test/api/anomalies/export",
+    "jwtToken": "<votre token JWT>"
+  }
+}

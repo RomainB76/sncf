@@ -43,9 +43,9 @@ async function surFichierChoisi(evenement: Event): Promise<void> {
     </div>
 
     <p class="etat__aide">
-      L'URL de l'API et le token JWT se règlent dans <code>public/config.json</code>
-      (<code>config.json</code> à côté de <code>index.html</code> une fois l'application déployée).
-      Le fichier est relu à chaque actualisation : inutile de redémarrer.
+      L'URL de l'API et le token JWT se règlent dans <code>public/config.local.json</code>, qui surcharge
+      <code>public/config.json</code> (fichiers à côté de <code>index.html</code> une fois l'application déployée).
+      Ils sont relus à chaque actualisation : inutile de redémarrer.
     </p>
   </section>
 

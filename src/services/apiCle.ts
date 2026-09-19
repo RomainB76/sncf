@@ -2,7 +2,8 @@
  * Service d'accès à clé : un GET authentifié par JWT qui renvoie le classeur Excel
  * contenant le jeu de données de la feuille « Données Globales ».
  *
- * L'URL et le token viennent de `public/config.json` (voir src/config/configuration.ts).
+ * L'URL et le token viennent de `public/config.json`, surchargé par `public/config.local.json`
+ * (voir src/config/configuration.ts).
  */
 import { CHEMIN_PROXY, urlRessource, type ConfigurationApi } from '@/config/configuration'
 
@@ -134,7 +135,7 @@ export async function telechargerExport(
     throw new ErreurApi(
       'CONFIGURATION',
       "L'URL de l'API clé n'est pas renseignée.",
-      'Renseignez « api.url » dans public/config.json.',
+      'Renseignez « api.url » dans public/config.local.json (à défaut, config.json).',
     )
   }
   const token = tokenNu(api.jwtToken)
@@ -142,7 +143,7 @@ export async function telechargerExport(
     throw new ErreurApi(
       'CONFIGURATION',
       "Le token JWT n'est pas renseigné.",
-      'Renseignez « api.jwtToken » dans public/config.json.',
+      'Renseignez « api.jwtToken » dans public/config.local.json (à défaut, config.json).',
     )
   }
 
@@ -191,7 +192,7 @@ export async function telechargerExport(
 
     if (reponse.status === 401 || reponse.status === 403) {
       const jwt = inspecterJwt(token)
-      let piste = 'Mettez à jour « api.jwtToken » dans public/config.json.'
+      let piste = 'Mettez à jour « api.jwtToken » dans public/config.local.json (à défaut, config.json).'
       if (!jwt.lisible) piste = `Le token configuré n'a pas la forme d'un JWT. ${piste}`
       else if (jwt.expire && jwt.expireLe) {
         piste = `Le token a expiré le ${jwt.expireLe.toLocaleString('fr-FR')}. ${piste}`

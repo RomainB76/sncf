@@ -36,19 +36,28 @@ serveur de développement : tout fonctionne avant même d'avoir branché la vrai
 
 ## Brancher la vraie API clé
 
-Tout se règle dans **`public/config.json`**. Le fichier est lu à l'exécution et **relu à chaque clic sur
-« Actualiser »** : ni build, ni redémarrage.
+Tout se règle dans **`public/config.json`**, lu à l'exécution et **relu à chaque clic sur « Actualiser »** : ni build,
+ni redémarrage. Mais ce fichier est versionné dans un dépôt public : **n'y écrivez jamais une vraie URL ni un vrai
+token** (un `git add -A` suivi d'un push les publierait). Mettez-les dans **`public/config.local.json`**, exclu du dépôt
+par `.gitignore` — copiez [public/config.local.example.json](public/config.local.example.json) pour démarrer :
 
 ```json
 {
   "api": {
     "url": "https://<hôte-clé>/<chemin-de-l-export>",
-    "jwtToken": "<votre token JWT>",
-    "viaProxy": false,
-    "timeoutMs": 30000
+    "jwtToken": "<votre token JWT>"
   }
 }
 ```
+
+`config.local.json` est lu juste après `config.json` et **ses valeurs l'emportent** : les sections `api` et `donnees`
+sont fusionnées clé par clé (ci-dessus, `viaProxy` et `timeoutMs` restent ceux de `config.json`), les listes `equipes`
+et `machines` sont remplacées en bloc si le fichier les définit. Il est relu lui aussi à chaque actualisation ; absent,
+l'application se comporte exactement comme avant. Le relais `/proxy-cle` du serveur Vite lit la même surcharge :
+navigateur et relais visent toujours la même URL.
+
+Avant de pousser : `git status` ne doit jamais lister `public/config.local.json`, et `git diff public/config.json` ne
+doit montrer aucun token réel.
 
 | Clé | Rôle |
 |---|---|
@@ -69,16 +78,21 @@ délai dépassé, réponse qui n'est pas un classeur (page de connexion HTML, JS
 ### Si l'appel est bloqué par le navigateur (CORS)
 
 Un appel direct du navigateur vers clé n'aboutit que si clé autorise l'origine de l'application. Sinon le navigateur
-bloque la réponse et l'application affiche « clé est injoignable ». Passez alors **`"viaProxy": true`** :
-l'appel transite par `/proxy-cle`, exécuté côté serveur Node (dev et preview), donc non soumis au CORS.
-`api.url` doit dans ce cas être une URL absolue.
+bloque la réponse et l'application affiche « clé est injoignable ». Passez alors **`"viaProxy": true`** (dans
+`config.local.json` ou `config.json`) : l'appel transite par `/proxy-cle`, exécuté côté serveur Node (dev et preview),
+donc non soumis au CORS. `api.url` doit dans ce cas être une URL absolue.
 
 En production sur un serveur statique, deux options : faire autoriser l'origine côté clé, ou reproduire le relais sur
 le serveur web frontal (nginx, IIS…) en exposant `/proxy-cle` vers l'URL de clé.
 
-> **Sécurité.** `config.json` est servi au navigateur : toute personne ayant accès à l'application peut lire le token.
-> C'est acceptable pour tester. Pour un déploiement partagé, préférez un relais côté serveur qui ajoute lui-même le
-> token, ou une authentification par utilisateur. Ne versionnez jamais un vrai token.
+> **Sécurité.** `config.json` et `config.local.json` sont servis au navigateur : toute personne ayant accès à
+> l'application peut lire le token. C'est acceptable pour tester. Pour un déploiement partagé, préférez un relais côté
+> serveur qui ajoute lui-même le token, ou une authentification par utilisateur. Ne versionnez jamais un vrai token :
+> seul `config.local.json`, ignoré par git, peut en contenir un.
+
+> **Au déploiement.** `npm run build` copie tout `public/` dans `dist/`, **`config.local.json` compris s'il existe**
+> (c'est voulu : `npm run preview` fonctionne alors avec la vraie API). Avant de livrer `dist/`, supprimez
+> `dist/config.local.json` ou construisez sans ce fichier, sauf si le token doit vraiment partir avec l'application.
 
 ### Secours : importer un fichier
 
@@ -143,7 +157,8 @@ couleurs à l'œil ([src/theme/palette.ts](src/theme/palette.ts), [src/styles/to
 ## Organisation du code
 
 ```
-public/config.json        Configuration lue à l'exécution (URL, token JWT, listes)
+public/config.json        Configuration lue à l'exécution (listes, options) — versionné : jamais de vrai token
+public/config.local.json  Surcharge locale (vraie URL, vrai token) — ignoré par git ; modèle : config.local.example.json
 dev-server/serveurCle.ts  Plugin Vite : API clé simulée + relais anti-CORS
 src/config/               Chargement et validation de config.json
 src/services/apiCle.ts    GET authentifié par JWT → classeur
