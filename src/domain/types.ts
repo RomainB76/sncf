@@ -70,14 +70,14 @@ export interface GlobalIndicators {
   alertOver4Days: number
 }
 
-/** « Synthèse par Équipe » table of the « Tableau de Bord » sheet. */
-export interface TeamsSummary {
+/** Category breakdown table of the dashboard: « Synthèse par Équipe » or « Synthèse par Machine ». */
+export interface CategorySummary {
   rows: SummaryRow[]
-  /** « Total Général » row: sum of the listed teams. */
+  /** « Total Général » row: sum of the listed rows. */
   grandTotal: Breakdown
   /**
-   * Prioritized anomalies whose team is not recognized: they count in the headline
-   * indicators but in no row of the table (same behaviour as Excel).
+   * Prioritized anomalies whose category (team or machine) is not recognized: they count in the
+   * headline indicators but in no row of the table (same behaviour as Excel).
    */
   outsideSummary: number
 }

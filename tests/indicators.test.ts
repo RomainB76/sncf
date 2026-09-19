@@ -3,6 +3,7 @@ import {
   globalIndicators,
   listMachines,
   listTeams,
+  summaryByMachine,
   summaryByTeam,
   teamAnalysis,
 } from '@/domain/indicators'
@@ -85,6 +86,25 @@ describe('summaryByTeam', () => {
   it('computes the « Total Général » and isolates the rows without a recognized team', () => {
     expect(summary.grandTotal).toEqual({ minor: 2, major: 1, blocking: 2, total: 5 })
     expect(summary.outsideSummary).toBe(2)
+  })
+})
+
+describe('summaryByMachine', () => {
+  const machines = listMachines(DATA, MACHINES)
+  const summary = summaryByMachine(DATA, machines)
+
+  it('groups by trainset across every team', () => {
+    expect(summary.rows.find((r) => r.key === 'Z27575')).toMatchObject({ minor: 1, major: 0, blocking: 3, total: 4 })
+    expect(summary.rows.find((r) => r.key === 'X76611')).toMatchObject({ minor: 1, major: 1, blocking: 0, total: 2 })
+  })
+
+  it('the total of a machine is the sum of the three severities (an anomaly without priority is not in it)', () => {
+    expect(summary.rows.find((r) => r.key === 'X76605')?.total).toBe(0)
+  })
+
+  it('computes the « Total Général » and isolates the rows without a recognized trainset', () => {
+    expect(summary.grandTotal).toEqual({ minor: 2, major: 1, blocking: 3, total: 6 })
+    expect(summary.outsideSummary).toBe(1)
   })
 })
 

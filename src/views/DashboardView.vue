@@ -201,6 +201,28 @@ watchEffect(() => {
         </div>
       </section>
     </div>
+
+    <section class="card card--machines" aria-labelledby="machines-title">
+      <div class="card__header">
+        <div>
+          <h2 id="machines-title" class="card__title">Synthèse par machine</h2>
+          <p class="card__subtitle">Nombre d'anomalies par machine et par criticité, toutes équipes confondues</p>
+        </div>
+      </div>
+      <div class="card__body">
+        <SummaryTable
+          first-column="Machine"
+          total-label="Total Général"
+          caption="Synthèse par machine : nombre d'anomalies par machine et par criticité, toutes équipes confondues"
+          :rows="store.machineSummary.rows"
+          :total="store.machineSummary.grandTotal"
+        />
+        <p v-if="store.machineSummary.outsideSummary > 0" class="note">
+          {{ formatInteger(store.machineSummary.outsideSummary) }} anomalie{{ store.machineSummary.outsideSummary > 1 ? 's' : '' }}
+          priorisée{{ store.machineSummary.outsideSummary > 1 ? 's' : '' }} sans machine reconnue — absente{{ store.machineSummary.outsideSummary > 1 ? 's' : '' }} de ce tableau.
+        </p>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -232,6 +254,16 @@ watchEffect(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.card--machines {
+  margin-top: 20px;
+}
+
+.note {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .card__legend {
