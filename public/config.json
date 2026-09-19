@@ -1,0 +1,27 @@
+{
+  "api": {
+    "url": "/mock-api/export-anomalies",
+    "jwtToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZW1vIiwiYXVkIjoibW9jay1jbGUiLCJub3RlIjoiamV0b24gZGUgZGVtb25zdHJhdGlvbiAtIGEgcmVtcGxhY2VyIn0.signature-de-demonstration",
+    "viaProxy": false,
+    "timeoutMs": 30000
+  },
+  "donnees": {
+    "feuille": "Données Globales",
+    "joursOuvres": "auto",
+    "exclureJoursFeries": true
+  },
+  "equipes": [
+    "AFFAIRES",
+    "CHAUDRO",
+    "DEMONTAGE",
+    "ESSAIS",
+    "MONTAGE 1",
+    "MONTAGE 2",
+    "MONTAGE 3",
+    "NUIT",
+    "PEINTURE",
+    "PIECES DEPOSEES"
+  ],
+  "machines": ["Z27575", "Z27665", "X76605", "X76611"],
+  "rafraichissementAutoMinutes": 0
+}

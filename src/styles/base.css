@@ -1,0 +1,314 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-s);
+}
+
+.visuellement-masque {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Page ---------- */
+
+.page {
+  max-width: 1640px;
+  margin: 0 auto;
+  padding: 28px 28px 48px;
+}
+
+.page__entete {
+  margin-bottom: 22px;
+}
+
+.page__surtitre {
+  margin-bottom: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.page__titre {
+  font-size: 26px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.page__sous-titre {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* Graphique et tableau côte à côte sur grand écran, l'un sous l'autre sinon. */
+.page__grille {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 1560px) {
+  .page__grille {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 960px) {
+  .page {
+    padding: 20px 16px 40px;
+  }
+}
+
+/* ---------- Carte ---------- */
+
+.carte {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+
+.carte__entete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  padding: 18px 20px 0;
+}
+
+.carte__titre {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.carte__sous-titre {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.carte__corps {
+  padding: 14px 20px 20px;
+}
+
+/* ---------- Boutons ---------- */
+
+.bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.bouton:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.bouton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.bouton--primaire {
+  border-color: transparent;
+  background: var(--primary-bg);
+  color: var(--on-accent);
+}
+
+.bouton--primaire:hover:not(:disabled) {
+  background: var(--primary-bg);
+  filter: brightness(1.1);
+}
+
+.bouton--icone {
+  width: 36px;
+  padding: 0;
+}
+
+/* ---------- Pastille de criticité (la couleur accompagne toujours un libellé) ---------- */
+
+.pastille {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--sev-neutre);
+}
+
+.pastille--mineure {
+  background: var(--sev-mineure);
+}
+
+.pastille--majeure {
+  background: var(--sev-majeure);
+}
+
+.pastille--bloquante {
+  background: var(--sev-bloquante);
+}
+
+/* Motifs d'accessibilité actifs : les pastilles et la barre de répartition portent les mêmes
+   hachures que les graphiques (45° pour Majeure, 135° pour Bloquante ; Mineure reste unie). */
+:root[data-motifs] .pastille--majeure,
+:root[data-motifs] .repartition__segment--majeure {
+  background-image: repeating-linear-gradient(45deg, transparent 0 2.5px, rgba(0, 0, 0, 0.42) 2.5px 4px);
+}
+
+:root[data-motifs] .pastille--bloquante,
+:root[data-motifs] .repartition__segment--bloquante {
+  background-image: repeating-linear-gradient(135deg, transparent 0 1.5px, rgba(0, 0, 0, 0.45) 1.5px 3px);
+}
+
+/* ---------- Infobulle des graphiques (DOM créé par ECharts, hors composants Vue) ---------- */
+
+.infobulle {
+  min-width: 190px;
+  padding: 12px 14px;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+}
+
+.infobulle__titre {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.infobulle__ligne {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 13px;
+}
+
+.infobulle__cle {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.infobulle__nom {
+  color: var(--text-secondary);
+}
+
+.infobulle__valeur {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.infobulle__part {
+  min-width: 38px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.infobulle__total {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.infobulle__total strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.infobulle__aide {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
