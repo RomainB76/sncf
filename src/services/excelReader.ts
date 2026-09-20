@@ -65,7 +65,7 @@ type Field =
 const HEADER_ALIASES: Record<Field, readonly string[]> = {
   number: ['numero', 'n', 'no', 'num', 'numero anomalie'],
   sef: ['sef'],
-  label: ['libelle'],
+  label: ['libelle', 'libelle de l anomalie'],
   description: ['description'],
   team: ['equipe'],
   trainset: ['rame', 'machine'],
@@ -206,6 +206,68 @@ export function readDate(cell: Cell, date1904 = false): string | null {
   return null
 }
 
+const CSV_DELIMITERS = [';', '\t', ','] as const
+
+/**
+ * Decodes a UTF-8 CSV, repairing the records the clé export cuts in two.
+ *
+ * That export never quotes its fields: a description or a comment holding a line break is cut
+ * across several physical lines, and every fragment is then read as an extra anomaly. The lines
+ * are joined back — a record is complete once it holds as many fields as the header row — and
+ * re-emitted as a quoted CSV.
+ *
+ * Returns `null` for a binary workbook or a content that is not UTF-8 text, which SheetJS then
+ * reads as it stands. Decoding here rather than handing over the bytes also keeps the accents
+ * of a file without a byte order mark, which SheetJS would otherwise read as latin1.
+ */
+function csvText(content: Uint8Array): string | null {
+  const isZip = content[0] === 0x50 && content[1] === 0x4b // xlsx
+  const isOle = content[0] === 0xd0 && content[1] === 0xcf // xls
+  if (isZip || isOle) return null
+
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(content)
+  } catch {
+    return null // not UTF-8 text: leave it to SheetJS
+  }
+  // Quoted fields mean a well-formed file: nothing to join back.
+  if (text.includes('"')) return text
+
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/)
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+
+  const header = lines[0]
+  if (header === undefined) return text
+  const delimiter = CSV_DELIMITERS.find((d) => header.includes(d))
+  if (delimiter === undefined) return text
+  const fieldCount = header.split(delimiter).length
+
+  const records: string[][] = []
+  let current: string[] = []
+  for (const line of lines) {
+    const parts = line.split(delimiter)
+    if (current.length === 0) {
+      current = parts
+    } else {
+      // The break fell inside the last field: the two halves belong to the same value.
+      const last = current.length - 1
+      current[last] = `${current[last] ?? ''}\n${parts[0] ?? ''}`
+      current.push(...parts.slice(1))
+    }
+    if (current.length >= fieldCount) {
+      records.push(current)
+      current = []
+    }
+  }
+  if (current.length > 0) records.push(current)
+  if (records.length === lines.length) return text // every line was already a whole record
+
+  return records
+    .map((fields) => fields.map((field) => `"${field.replace(/"/g, '""')}"`).join(delimiter))
+    .join('\n')
+}
+
 /**
  * Reads a workbook (xlsx, xls or csv) and returns the anomalies it contains.
  * @throws ReadError when the file is unreadable or when the expected columns are missing.
@@ -217,9 +279,13 @@ export async function readWorkbook(
   // SheetJS is large: loaded on demand, outside the main bundle.
   const XLSX = await import('xlsx')
 
+  const csv = csvText(content instanceof Uint8Array ? content : new Uint8Array(content))
+
   let workbook
   try {
-    workbook = XLSX.read(content, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false })
+    workbook = csv === null
+      ? XLSX.read(content, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false })
+      : XLSX.read(csv, { type: 'string', cellDates: false, cellFormula: false, cellHTML: false })
   } catch (e) {
     throw new ReadError(
       "Le fichier reçu n'est pas un classeur Excel lisible.",

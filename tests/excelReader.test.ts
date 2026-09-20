@@ -60,6 +60,19 @@ describe('readWorkbook — export identical to the « Données Globales » sheet
     expect(anomalies[0]).toMatchObject({ number: '7', teamKey: 'NUIT', trainsetKey: 'Z27575', priority: 'major' })
   })
 
+  it('reads the CSV export of the clé API, whose columns stop at « Créée par »', async () => {
+    const { anomalies, daysSourceCounts } = await readWorkbook(
+      workbook([
+        ['Numéro', 'SEF', "Libellé de l'anomalie", 'Description', 'Équipe', 'Rame', 'Véhicule', 'Date de création', 'Commentaire', 'Créée par'],
+        [33, 'Non', 'Absent', 'Pièce manquante', 'MONTAGE 1', 'X76611', 'X76611', '27/07/2026', 'En attente de pièce', 'A. EXEMPLE'],
+      ]),
+      { referenceDate: '2026-09-18' },
+    )
+
+    expect(anomalies[0]).toMatchObject({ number: '33', label: 'Absent', teamKey: 'MONTAGE 1', businessDays: 39, daysSource: 'computed', priority: 'blocking' })
+    expect(daysSourceCounts).toEqual({ file: 0, computed: 1, missing: 0 })
+  })
+
   it('tolerates a title above the header row', async () => {
     const { anomalies } = await readWorkbook(
       workbook([['Export clé du 18/09/2026'], [], HEADERS, [1, 'Non', 'Absent', 'x', 'NUIT', 'Z27575', 'Z27575', 46282, null, 'A', 1, 'Conforme', 'Mineure']]),
@@ -79,6 +92,42 @@ describe('readWorkbook — export identical to the « Données Globales » sheet
   it('skips entirely empty rows', async () => {
     const { anomalies } = await readWorkbook(workbook([HEADERS, [], [1, null, null, null, 'NUIT', 'Z27575', null, null, null, null, 3, null, null], []]))
     expect(anomalies).toHaveLength(1)
+  })
+})
+
+describe('readWorkbook — CSV export of the clé API, whose fields are never quoted', () => {
+  const CSV_HEADER = "Numéro;SEF;Libellé de l'anomalie;Description;Équipe;Rame;Véhicule;Date de création;Commentaire;Créée par"
+  const csv = (text: string) => new TextEncoder().encode(text)
+
+  it('joins back a record cut by a line break inside a field', async () => {
+    // The comment of anomaly 1 holds a line break: unquoted, it spills onto the next line.
+    const { anomalies } = await readWorkbook(
+      csv(`${CSV_HEADER}\n1;Non;Absent;Pièce manquante;NUIT;Z27575;Z27575;10/09/2026;Première ligne\nDeuxième ligne;A. EXEMPLE\n2;Non;Serrage;Écrou;NUIT;Z27575;Z27575;11/09/2026;;B. EXEMPLE\n`),
+      { referenceDate: '2026-09-18' },
+    )
+
+    expect(anomalies).toHaveLength(2)
+    expect(anomalies[0]).toMatchObject({ number: '1', comment: 'Première ligne\nDeuxième ligne', createdBy: 'A. EXEMPLE' })
+    expect(anomalies[1]).toMatchObject({ number: '2', createdBy: 'B. EXEMPLE' })
+  })
+
+  it('joins a record spread over more than two lines', async () => {
+    const { anomalies } = await readWorkbook(
+      csv(`${CSV_HEADER}\n1;Non;Branchement;Repère P15\nP9, P10\nP17;NUIT;Z27575;Z27575;10/09/2026;;A. EXEMPLE\n`),
+      { referenceDate: '2026-09-18' },
+    )
+
+    expect(anomalies).toHaveLength(1)
+    expect(anomalies[0]).toMatchObject({ number: '1', description: 'Repère P15\nP9, P10\nP17', team: 'NUIT' })
+  })
+
+  it('leaves a well-formed CSV untouched', async () => {
+    const { anomalies } = await readWorkbook(
+      csv(`${CSV_HEADER}\n1;Non;Absent;Pièce;NUIT;Z27575;Z27575;10/09/2026;;A. EXEMPLE\n2;Non;Serrage;Écrou;NUIT;Z27575;Z27575;11/09/2026;;B. EXEMPLE\n`),
+      { referenceDate: '2026-09-18' },
+    )
+
+    expect(anomalies.map((a) => a.number)).toEqual(['1', '2'])
   })
 })
 

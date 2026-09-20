@@ -74,6 +74,12 @@ const outsideSummary = computed(() => {
   return store.anomalies.filter((a) => a.priority !== null && !known.has(a.teamKey))
 })
 
+/**
+ * Anomalies carrying no priority: the criticity tables and charts count by priority, so these
+ * are part of « Total anomalies » but of no row. The other half of the gap with « Total Général ».
+ */
+const unprioritized = computed(() => store.anomalies.filter((a) => a.priority === null).length)
+
 watchEffect(() => {
   document.title = 'Tableau de bord · Suivi des anomalies'
 })
@@ -198,6 +204,13 @@ watchEffect(() => {
               </tbody>
             </table>
           </details>
+
+          <p v-if="unprioritized > 0" class="note">
+            {{ formatInteger(unprioritized) }} anomalie{{ unprioritized > 1 ? 's' : '' }} sans priorité — moins d'un jour
+            ouvré écoulé depuis la création, ou date de création absente. Comptée{{ unprioritized > 1 ? 's' : '' }} dans
+            « Total anomalies », absente{{ unprioritized > 1 ? 's' : '' }} de ce tableau et des graphiques ; visible{{ unprioritized > 1 ? 's' : '' }}
+            dans le détail de chaque équipe.
+          </p>
         </div>
       </section>
     </div>
