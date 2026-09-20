@@ -121,6 +121,18 @@ describe('readWorkbook — CSV export of the clé API, whose fields are never qu
     expect(anomalies[0]).toMatchObject({ number: '1', description: 'Repère P15\nP9, P10\nP17', team: 'NUIT' })
   })
 
+  it('reads the dates as day/month/year, never the American way', async () => {
+    // Left to itself, SheetJS reads a CSV with US conventions: 10/09 would become 9 October,
+    // and 01/09 the 9th of January — eight months early, and the priority with it.
+    const { anomalies } = await readWorkbook(
+      csv(`${CSV_HEADER}\n1;Non;Absent;Pièce;NUIT;Z27575;Z27575;10/09/2026;;A. EXEMPLE\n2;Non;Serrage;Écrou;NUIT;Z27575;Z27575;01/09/2026;;B. EXEMPLE\n`),
+      { referenceDate: '2026-09-18' },
+    )
+
+    expect(anomalies.map((a) => a.creationDate)).toEqual(['2026-09-10', '2026-09-01'])
+    expect(anomalies.map((a) => a.businessDays)).toEqual([6, 13])
+  })
+
   it('leaves a well-formed CSV untouched', async () => {
     const { anomalies } = await readWorkbook(
       csv(`${CSV_HEADER}\n1;Non;Absent;Pièce;NUIT;Z27575;Z27575;10/09/2026;;A. EXEMPLE\n2;Non;Serrage;Écrou;NUIT;Z27575;Z27575;11/09/2026;;B. EXEMPLE\n`),

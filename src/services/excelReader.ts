@@ -285,7 +285,9 @@ export async function readWorkbook(
   try {
     workbook = csv === null
       ? XLSX.read(content, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false })
-      : XLSX.read(csv, { type: 'string', cellDates: false, cellFormula: false, cellHTML: false })
+      // « raw »: SheetJS reads a CSV with US conventions and would turn « 10/09/2026 » into
+      // 9 October. Everything stays text, which readDate reads as day/month/year.
+      : XLSX.read(csv, { type: 'string', raw: true, cellDates: false, cellFormula: false, cellHTML: false })
   } catch (e) {
     throw new ReadError(
       "Le fichier reçu n'est pas un classeur Excel lisible.",
