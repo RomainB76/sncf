@@ -74,6 +74,12 @@ const outsideSummary = computed(() => {
   return store.anomalies.filter((a) => a.priority !== null && !known.has(a.teamKey))
 })
 
+/**
+ * Anomalies carrying no priority: the criticity tables and charts count by priority, so these
+ * are part of « Total anomalies » but of no row. The other half of the gap with « Total Général ».
+ */
+const unprioritized = computed(() => store.anomalies.filter((a) => a.priority === null).length)
+
 watchEffect(() => {
   document.title = 'Tableau de bord · Suivi des anomalies'
 })
@@ -198,9 +204,38 @@ watchEffect(() => {
               </tbody>
             </table>
           </details>
+
+          <p v-if="unprioritized > 0" class="note">
+            {{ formatInteger(unprioritized) }} anomalie{{ unprioritized > 1 ? 's' : '' }} sans priorité — moins d'un jour
+            ouvré écoulé depuis la création, ou date de création absente. Comptée{{ unprioritized > 1 ? 's' : '' }} dans
+            « Total anomalies », absente{{ unprioritized > 1 ? 's' : '' }} de ce tableau et des graphiques ; visible{{ unprioritized > 1 ? 's' : '' }}
+            dans le détail de chaque équipe.
+          </p>
         </div>
       </section>
     </div>
+
+    <section class="card card--machines" aria-labelledby="machines-title">
+      <div class="card__header">
+        <div>
+          <h2 id="machines-title" class="card__title">Synthèse par machine</h2>
+          <p class="card__subtitle">Nombre d'anomalies par machine et par criticité, toutes équipes confondues</p>
+        </div>
+      </div>
+      <div class="card__body">
+        <SummaryTable
+          first-column="Machine"
+          total-label="Total Général"
+          caption="Synthèse par machine : nombre d'anomalies par machine et par criticité, toutes équipes confondues"
+          :rows="store.machineSummary.rows"
+          :total="store.machineSummary.grandTotal"
+        />
+        <p v-if="store.machineSummary.outsideSummary > 0" class="note">
+          {{ formatInteger(store.machineSummary.outsideSummary) }} anomalie{{ store.machineSummary.outsideSummary > 1 ? 's' : '' }}
+          priorisée{{ store.machineSummary.outsideSummary > 1 ? 's' : '' }} sans machine reconnue — absente{{ store.machineSummary.outsideSummary > 1 ? 's' : '' }} de ce tableau.
+        </p>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -232,6 +267,16 @@ watchEffect(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.card--machines {
+  margin-top: 20px;
+}
+
+.note {
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .card__legend {

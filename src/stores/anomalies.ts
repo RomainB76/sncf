@@ -16,6 +16,7 @@ import {
   globalIndicators,
   listMachines,
   listTeams,
+  summaryByMachine,
   summaryByTeam,
   teamAnalysis,
 } from '@/domain/indicators'
@@ -85,6 +86,7 @@ export const useAnomaliesStore = defineStore('anomalies', () => {
   const machines = computed(() => listMachines(anomalies.value, configuration.value?.machines ?? []))
   const indicators = computed(() => globalIndicators(anomalies.value))
   const summary = computed(() => summaryByTeam(anomalies.value, teams.value))
+  const machineSummary = computed(() => summaryByMachine(anomalies.value, machines.value))
 
   const analysesByTeam = computed(() => {
     const result = new Map<string, TeamAnalysis>()
@@ -205,6 +207,7 @@ export const useAnomaliesStore = defineStore('anomalies', () => {
     machines,
     indicators,
     summary,
+    machineSummary,
     analysesByTeam,
     hasData,
     isDemo,

@@ -9,13 +9,13 @@ import { isInAlert } from './priority'
 import type {
   Anomaly,
   Breakdown,
+  CategorySummary,
   GlobalIndicators,
   Priority,
   Reference,
   SummaryRow,
   Team,
   TeamAnalysis,
-  TeamsSummary,
 } from './types'
 
 export function emptyBreakdown(): Breakdown {
@@ -60,25 +60,21 @@ export function globalIndicators(anomalies: readonly Anomaly[]): GlobalIndicator
   return result
 }
 
-/**
- * « Synthèse par Équipe » table (Tableau de Bord, A8:E19).
- *
- *   =NB.SI.ENS('Données Globales'!$E:$E; <team>; 'Données Globales'!$M:$M; <priority>)
- *   Total = SOMME(B:D); Total Général = sum of the rows.
- */
-export function summaryByTeam(
+/** Shared grouping logic of `summaryByTeam` and `summaryByMachine`: same shape, different key. */
+function summaryByCategory(
   anomalies: readonly Anomaly[],
-  teams: readonly Reference[],
-): TeamsSummary {
+  categories: readonly Reference[],
+  categoryKey: (a: Anomaly) => string,
+): CategorySummary {
   const rows = new Map<string, SummaryRow>()
-  for (const team of teams) {
-    rows.set(team.key, { key: team.key, label: team.label, ...emptyBreakdown() })
+  for (const category of categories) {
+    rows.set(category.key, { key: category.key, label: category.label, ...emptyBreakdown() })
   }
 
   let outsideSummary = 0
   for (const a of anomalies) {
     if (a.priority === null) continue
-    const row = rows.get(a.teamKey)
+    const row = rows.get(categoryKey(a))
     if (row) count(row, a.priority)
     else outsideSummary += 1
   }
@@ -87,6 +83,25 @@ export function summaryByTeam(
   for (const row of rows.values()) add(grandTotal, row)
 
   return { rows: [...rows.values()], grandTotal, outsideSummary }
+}
+
+/**
+ * « Synthèse par Équipe » table (Tableau de Bord, A8:E19).
+ *
+ *   =NB.SI.ENS('Données Globales'!$E:$E; <team>; 'Données Globales'!$M:$M; <priority>)
+ *   Total = SOMME(B:D); Total Général = sum of the rows.
+ */
+export function summaryByTeam(anomalies: readonly Anomaly[], teams: readonly Reference[]): CategorySummary {
+  return summaryByCategory(anomalies, teams, (a) => a.teamKey)
+}
+
+/**
+ * « Synthèse par Machine » table (Tableau de Bord): same breakdown as `summaryByTeam`, grouped by
+ * trainset across every team. Not part of the original workbook (each team sheet only details its
+ * own machines) — added for the overview that the per-team tables don't give on their own.
+ */
+export function summaryByMachine(anomalies: readonly Anomaly[], machines: readonly Reference[]): CategorySummary {
+  return summaryByCategory(anomalies, machines, (a) => a.trainsetKey)
 }
 
 /**

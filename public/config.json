@@ -23,5 +23,5 @@
     "PIECES DEPOSEES"
   ],
   "machines": ["Z27575", "Z27665", "X76605", "X76611"],
-  "autoRefreshMinutes": 0
+  "autoRefreshMinutes": 5
 }
