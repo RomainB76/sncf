@@ -43,6 +43,22 @@ function Get-UrlApi {
   return $url.Trim()
 }
 
+# Une ligne par appel relaye, pour qu un token refuse ou une cle injoignable se diagnostiquent
+# depuis la fenetre elle-meme. Le token n est jamais affiche : seulement sa presence et sa taille.
+function Write-Diagnostic {
+  param([int]$code, [int]$tailleToken, [string]$cible, [string]$cibleFinale)
+  if ($tailleToken -gt 0) { $jeton = "token de $tailleToken caracteres" } else { $jeton = 'AUCUN TOKEN RECU' }
+  if ($code -ge 200 -and $code -lt 300) { $couleur = 'Green' } else { $couleur = 'Red' }
+  Write-Host ("  [{0}] cle-proxy -> HTTP {1} ({2})" -f (Get-Date -Format 'HH:mm:ss'), $code, $jeton) -ForegroundColor $couleur
+  if ($code -eq 401 -or $code -eq 403) {
+    Write-Host '      Token refuse par cle : expire, mal colle, ou sans droits sur cette UO.' -ForegroundColor Yellow
+  }
+  # Une redirection fait perdre l en-tete Authorization : elle expliquerait un 401 inattendu.
+  if ($cibleFinale -and $cibleFinale -ne $cible) {
+    Write-Host "      Redirection vers $cibleFinale" -ForegroundColor Yellow
+  }
+}
+
 function Send-Json {
   param($reponse, [int]$code, [string]$message)
   $reponse.StatusCode = $code
@@ -94,13 +110,18 @@ try {
         if (-not ($cible -match '^https?://')) {
           Send-Json $reponse 500 'Relais : « api.url » doit etre une URL absolue (http ou https) dans config.json ou config.local.json.'
         } else {
+          $entete = $requete.Headers['Authorization']
+          $tailleToken = 0
+          if ($entete) { $tailleToken = ($entete -replace '^Bearer\s+', '').Length }
           try {
             $appel = [System.Net.HttpWebRequest]::Create($cible)
             $appel.Method = 'GET'
             $appel.Timeout = 60000
-            $entete = $requete.Headers['Authorization']
             if ($entete) { $appel.Headers.Add('Authorization', $entete) }
+            # « Accept » est un en-tete restreint : il passe par la propriete, pas par Headers.Add.
+            if ($requete.Headers['Accept']) { $appel.Accept = $requete.Headers['Accept'] }
             $recu = $appel.GetResponse()
+            Write-Diagnostic ([int]$recu.StatusCode) $tailleToken $cible $recu.ResponseUri.AbsoluteUri
             $reponse.StatusCode = [int]$recu.StatusCode
             if ($recu.ContentType) { $reponse.ContentType = $recu.ContentType }
             $flux = New-Object IO.MemoryStream
@@ -114,6 +135,7 @@ try {
             # l application sait alors expliquer un token refuse ou expire.
             $recu = $_.Exception.Response
             if ($recu) {
+              Write-Diagnostic ([int]$recu.StatusCode) $tailleToken $cible $recu.ResponseUri.AbsoluteUri
               $reponse.StatusCode = [int]$recu.StatusCode
               $flux = New-Object IO.MemoryStream
               $recu.GetResponseStream().CopyTo($flux)
@@ -121,6 +143,8 @@ try {
               $reponse.ContentLength64 = $octets.Length
               $reponse.OutputStream.Write($octets, 0, $octets.Length)
             } else {
+              Write-Diagnostic 502 $tailleToken $cible $null
+              Write-Host "      $($_.Exception.Message)" -ForegroundColor DarkGray
               Send-Json $reponse 502 "Relais : impossible de joindre cle. $($_.Exception.Message)"
             }
           }
