@@ -33,6 +33,7 @@ serveur de développement : tout fonctionne avant même d'avoir branché la vrai
 | `npm run build` | Vérification de types puis build de production dans `dist/` |
 | `npm run preview` | Sert le build de production (API simulée et relais inclus) |
 | `npm run mock:import -- "<classeur.xlsx>"` | Régénère le jeu de données de l'API simulée |
+| `npm run package` | Assemble le dossier à remettre à un poste sans Node (voir « Distribuer l'application ») |
 
 ## Brancher la vraie API clé
 
@@ -98,6 +99,33 @@ le serveur web frontal (nginx, IIS…) en exposant `/cle-proxy` vers l'URL de cl
 
 Le bouton **Importer un fichier** charge un export clé (ou le classeur complet) depuis le poste : même lecture, mêmes
 indicateurs. Utile quand clé est indisponible.
+
+## Distribuer l'application
+
+`npm run package` assemble **`package/SuiviAnomalies/`**, à zipper et à remettre tel quel. Le poste
+destinataire n'a besoin ni de Node, ni de droits d'administrateur : `serveur.ps1` s'appuie sur
+PowerShell et .NET, livrés avec Windows.
+
+```
+SuiviAnomalies/
+  Lancer.bat      Double-clic : démarre le serveur local et ouvre le navigateur
+  serveur.ps1     Serveur HTTP local + relais « /cle-proxy » (équivalent de dev-server/cleServer.ts)
+  LISEZMOI.txt    Mode d'emploi destiné à l'utilisateur final
+  site/           Le build de production
+```
+
+Le relais est indispensable : clé n'autorise pas l'origine de l'application, un appel direct du
+navigateur est bloqué par le CORS (`TypeError: Failed to fetch`). `serveur.ps1` lit `api.url` dans
+`site/config.json` puis `site/config.local.json` côté serveur, exactement comme le relais Vite.
+
+**Chaque utilisateur met son propre token** dans `site/config.local.json` ; le paquet n'en contient
+aucun. `vite build` recopiant tout `public/` dans `dist/`, **y compris `config.local.json` et son
+vrai token**, le script d'assemblage le remplace systématiquement par un modèle vide et refuse de
+produire un paquet où subsisterait un JWT. L'URL de clé, elle, est lue dans votre configuration
+locale et inscrite dans le paquet : c'est une adresse interne, qu'aucun fichier versionné ne porte.
+
+Si le destinataire travaille sur une autre UO, l'identifiant de sous-entité présent dans `api.url`
+doit être remplacé par le sien.
 
 ## Correspondance Excel → application
 

@@ -1,0 +1,52 @@
+SUIVI DES ANOMALIES
+===================
+
+Rien a installer : tout ce qui est necessaire est deja livre avec Windows.
+
+
+1. RENSEIGNER VOTRE TOKEN
+-------------------------
+
+Ouvrez le fichier  site\config.local.json  avec le Bloc-notes
+(clic droit sur le fichier > Ouvrir avec > Bloc-notes).
+
+Remplacez  <collez ici votre token JWT>  par votre token, en gardant les
+guillemets autour. Enregistrez, puis fermez le Bloc-notes.
+
+Pour recuperer votre token :
+  - ouvrez le site CLE dans Chrome, connecte a votre compte ;
+  - appuyez sur F12, onglet << Reseau >> ;
+  - lancez un export depuis le site ;
+  - cliquez sur la requete qui telecharge le fichier ;
+  - dans << En-tetes de requete >>, copiez tout ce qui suit  Authorization: Bearer
+
+
+2. LANCER L'APPLICATION
+-----------------------
+
+Double-cliquez sur  Lancer.bat
+
+Une fenetre noire s'ouvre : c'est le serveur local, laissez-la ouverte.
+Votre navigateur s'ouvre automatiquement sur le tableau de bord.
+
+Pour arreter : fermez la fenetre noire.
+
+
+3. EN CAS DE PROBLEME
+---------------------
+
+<< Authentification refusee >>
+   Le token est absent, mal colle, ou expire (duree de vie : environ 4 h).
+   Reprenez l'etape 1 avec un token frais, puis cliquez sur << Actualiser >>
+   dans l'application : inutile de relancer quoi que ce soit.
+
+<< cle est injoignable >>
+   Le site CLE n'est pas accessible depuis ce poste (VPN necessaire ?).
+   Verifiez qu'il s'ouvre normalement dans votre navigateur.
+
+La fenetre noire se ferme aussitot
+   Windows a bloque le script. Clic droit sur Lancer.bat > Proprietes >
+   cochez << Debloquer >> en bas, puis Appliquer.
+
+Aucune donnee n'est stockee par l'application : elle interroge CLE a chaque
+actualisation, automatiquement toutes les 5 minutes.

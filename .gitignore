@@ -3,6 +3,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Package assembled by « npm run package » (carries the real clé URL)
+package/
+
 # Real data (names of agents, anomalies): never commit
 mock/*.xlsx
 tests/fixtures/*.xlsx
