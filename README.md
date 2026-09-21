@@ -90,8 +90,15 @@ bouton « Exporter en CSV »**, qui semble pourtant plus naturel :
   (`count`) et les noms d'équipe (`metadatas.equipes`) dans la même réponse. Ses dates sont en ISO, et le JSON ne
   connaît ni les retours à la ligne qui coupaient les lignes du CSV, ni l'ambiguïté jour/mois de ses dates.
 
-`size` doit couvrir toutes les anomalies d'une page : au-delà, l'application le signale par un bandeau. « Créée par »
-y est un code CP, pas un nom — l'API ne fournit que l'identifiant de l'agent.
+`size` doit couvrir toutes les anomalies d'une page : au-delà, l'application le signale par un bandeau.
+
+**Noms des agents.** L'API de liste ne donne l'auteur d'une anomalie que par son code CP. L'application le traduit
+avec `GET /api/users/<code CP>`, relayé par `/cle-proxy/users/<code CP>` : **un appel par agent distinct**, pas par
+anomalie (27 pour 126 anomalies à l'écriture de ces lignes), puis mis en cache, un code désignant toujours la même
+personne — les actualisations ne cherchent que les agents nouveaux. Seuls le prénom et le nom sont retenus de la
+réponse, qui porte aussi l'e-mail et le rôle. Aucun indicateur n'en dépend : les chiffres s'affichent dès la liste
+reçue, les noms suivent, et un nom introuvable laisse simplement le code affiché. Côté relais, seul ce code vient de
+la requête, vérifié alphanumérique ; l'hôte reste celui de `api.url`.
 
 ### Si l'appel est bloqué par le navigateur (CORS)
 

@@ -12,6 +12,10 @@
  *      to CORS. The target is read from those files on the server side, never from the request:
  *      the relay cannot be diverted to another address.
  *
+ *  GET /cle-proxy/users/<CP code>
+ *      Name of the agent behind a CP code, on the same clé host. Only the code comes from the
+ *      request, and it is checked to be alphanumeric: neither another host nor another path.
+ *
  * In production (static files), these routes do not exist: either clé allows the origin of
  * the application (CORS), or the front web server reproduces the relay (see README).
  *
@@ -24,6 +28,10 @@ import type { Connect, Logger, Plugin } from 'vite'
 
 const MOCK_PATH = '/mock-api/anomalies-export'
 const PROXY_PATH = '/cle-proxy'
+/** Name of an agent from its CP code: « /cle-proxy/users/<code> » → « <clé host>/api/users/<code> ». */
+const USERS_PREFIX = `${PROXY_PATH}/users/`
+/** The only part of a relayed URL taken from the request: strictly checked (see src/services/cleApi.ts). */
+const CP_CODE = /^[0-9A-Za-z]{1,16}$/
 /** Local override of config.json, in the same folder (see src/config/configuration.ts). */
 const LOCAL_CONFIG_FILE = 'config.local.json'
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -99,15 +107,24 @@ async function readApiUrl(configFile: string, logger: Logger): Promise<string> {
 
 function proxy(configFile: string, logger: Logger): Connect.NextHandleFunction {
   return (req, res, next) => {
-    if (pathOf(req) !== PROXY_PATH) return next()
+    const requestPath = pathOf(req)
+    let userCode: string | null = null
+    if (requestPath.startsWith(USERS_PREFIX)) {
+      userCode = requestPath.slice(USERS_PREFIX.length)
+      if (!CP_CODE.test(userCode)) return respondJson(res, 400, { error: 'Relais : code CP invalide.' })
+    } else if (requestPath !== PROXY_PATH) {
+      return next()
+    }
     if (req.method !== 'GET') return respondJson(res, 405, { error: 'Méthode non autorisée : GET attendu.' })
 
     void (async () => {
       let target: URL
       try {
         // Re-read on every call: a change of URL is taken into account without restarting the server.
-        target = new URL(await readApiUrl(configFile, logger))
-        if (target.protocol !== 'http:' && target.protocol !== 'https:') throw new Error('unsupported protocol')
+        const apiUrl = new URL(await readApiUrl(configFile, logger))
+        if (apiUrl.protocol !== 'http:' && apiUrl.protocol !== 'https:') throw new Error('unsupported protocol')
+        // The host always comes from the configuration: the request only brings a checked CP code.
+        target = userCode === null ? apiUrl : new URL(`/api/users/${userCode}`, apiUrl.origin)
       } catch {
         return respondJson(res, 500, {
           error:

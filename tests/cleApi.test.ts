@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ApiConfiguration } from '@/config/configuration'
-import { ApiError, downloadExport, inspectJwt } from '@/services/cleApi'
+import { ApiError, downloadExport, fetchAgentName, inspectJwt } from '@/services/cleApi'
 
 const jwt = (payload: object) =>
   `${btoa('{"alg":"HS256","typ":"JWT"}')}.${btoa(JSON.stringify(payload)).replace(/=+$/, '')}.signature`
@@ -166,5 +166,44 @@ describe('downloadExport', () => {
     const pending = errorOf(downloadExport({ ...API, timeoutMs: 1_000 }))
     await vi.advanceTimersByTimeAsync(1_001)
     expect((await pending).code).toBe('TIMEOUT')
+  })
+})
+
+describe('fetchAgentName', () => {
+  // Fictitious agent: no real name may appear in the tests.
+  const USER = { codeCp: '1234567a', nom: 'EXEMPLE', prenom: 'Alix', email: 'alix.exemple@exemple.test', role: 'CONTROLEUR' }
+
+  it('keeps only the first and last name of the agent', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(JSON.stringify(USER), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect(await fetchAgentName(API, '1234567a')).toBe('Alix EXEMPLE')
+    // Direct call: same clé host as « api.url », users path.
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://cle.exemple.test/api/users/1234567a')
+  })
+
+  it('goes through the relay when « viaProxy » is on', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(JSON.stringify(USER), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchAgentName({ ...API, viaProxy: true }, '1234567a')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('http://localhost:5173/cle-proxy/users/1234567a')
+  })
+
+  it('gives null rather than failing: the code is then shown as it stands', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('{"message":"Not Found"}', { status: 404 })))
+    expect(await fetchAgentName(API, '1234567a')).toBeNull()
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    expect(await fetchAgentName(API, '1234567a')).toBeNull()
+  })
+
+  it('never builds a URL from something that is not a CP code', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    expect(await fetchAgentName(API, '../admin')).toBeNull()
+    expect(await fetchAgentName(API, 'Alix EXEMPLE')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

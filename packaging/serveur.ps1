@@ -47,9 +47,14 @@ function Get-UrlApi {
 # depuis la fenetre elle-meme. Le token n est jamais affiche : seulement sa presence et sa taille.
 function Write-Diagnostic {
   param([int]$code, [int]$tailleToken, [string]$cible, [string]$cibleFinale)
+  $reussi = $code -ge 200 -and $code -lt 300
+  # Les noms d agents se cherchent par dizaines au premier chargement : seuls leurs echecs comptent.
+  $agent = $cible -match '/api/users/'
+  if ($agent -and $reussi) { return }
+  if ($agent) { $route = 'nom d agent' } else { $route = 'cle-proxy' }
   if ($tailleToken -gt 0) { $jeton = "token de $tailleToken caracteres" } else { $jeton = 'AUCUN TOKEN RECU' }
-  if ($code -ge 200 -and $code -lt 300) { $couleur = 'Green' } else { $couleur = 'Red' }
-  Write-Host ("  [{0}] cle-proxy -> HTTP {1} ({2})" -f (Get-Date -Format 'HH:mm:ss'), $code, $jeton) -ForegroundColor $couleur
+  if ($reussi) { $couleur = 'Green' } else { $couleur = 'Red' }
+  Write-Host ("  [{0}] {1} -> HTTP {2} ({3})" -f (Get-Date -Format 'HH:mm:ss'), $route, $code, $jeton) -ForegroundColor $couleur
   if ($code -eq 401 -or $code -eq 403) {
     Write-Host '      Token refuse par cle : expire, mal colle, ou sans droits sur cette UO.' -ForegroundColor Yellow
   }
@@ -105,11 +110,23 @@ try {
     $chemin = $requete.Url.AbsolutePath
 
     try {
-      if ($chemin -eq '/cle-proxy') {
+      # Nom d un agent a partir de son code CP. Seul ce code vient de la requete, et il doit etre
+      # alphanumerique : ni un autre hote, ni un autre chemin.
+      $codeAgent = $null
+      if ($chemin.StartsWith('/cle-proxy/users/')) {
+        $codeAgent = $chemin.Substring('/cle-proxy/users/'.Length)
+        if ($codeAgent -cnotmatch '^[0-9A-Za-z]{1,16}$') { $codeAgent = '' }
+      }
+
+      if ($codeAgent -eq '') {
+        Send-Json $reponse 400 'Relais : code CP invalide.'
+      } elseif ($chemin -eq '/cle-proxy' -or $codeAgent) {
         $cible = Get-UrlApi
         if (-not ($cible -match '^https?://')) {
           Send-Json $reponse 500 'Relais : « api.url » doit etre une URL absolue (http ou https) dans config.json ou config.local.json.'
         } else {
+          # L hote vient toujours de la configuration.
+          if ($codeAgent) { $cible = ([Uri]$cible).GetLeftPart([UriPartial]::Authority) + "/api/users/$codeAgent" }
           $entete = $requete.Headers['Authorization']
           $tailleToken = 0
           if ($entete) { $tailleToken = ($entete -replace '^Bearer\s+', '').Length }

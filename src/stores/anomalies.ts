@@ -10,6 +10,7 @@ import { defineStore } from 'pinia'
 import {
   ConfigurationError,
   loadConfiguration,
+  type ApiConfiguration,
   type Configuration,
 } from '@/config/configuration'
 import {
@@ -21,7 +22,7 @@ import {
   teamAnalysis,
 } from '@/domain/indicators'
 import type { Anomaly, Team, TeamAnalysis } from '@/domain/types'
-import { ApiError, downloadExport } from '@/services/cleApi'
+import { ApiError, downloadExport, fetchAgentName, isCpCode } from '@/services/cleApi'
 import { ReadError, readWorkbook, type ReadResult } from '@/services/excelReader'
 
 export type LoadingState = 'initial' | 'loading' | 'ready' | 'error'
@@ -155,13 +156,47 @@ export const useAnomaliesStore = defineStore('anomalies', () => {
     }
   }
 
-  /** Fetches the export from clé and recomputes every indicator. */
+  /**
+   * CP code → agent name. A code always designates the same agent: each one is looked up once,
+   * then kept across refreshes, which only look up the agents not met yet.
+   */
+  const agentNames = new Map<string, string>()
+
+  /** The list API gives the author of an anomaly as a CP code: shows the names already known. */
+  function withKnownNames(list: readonly Anomaly[]): Anomaly[] {
+    return list.map((a) => {
+      const name = agentNames.get(a.createdBy)
+      return name === undefined ? a : { ...a, createdBy: name }
+    })
+  }
+
+  /** Looks up the agents not met yet; `true` when there were some. */
+  async function lookUpAgents(list: readonly Anomaly[], api: ApiConfiguration, signal: AbortSignal): Promise<boolean> {
+    const unknown = [...new Set(list.map((a) => a.createdBy))].filter((code) => isCpCode(code) && !agentNames.has(code))
+    if (unknown.length === 0) return false
+    await Promise.all(
+      unknown.map(async (code) => {
+        const name = await fetchAgentName(api, code, signal)
+        if (name !== null) agentNames.set(code, name)
+      }),
+    )
+    return true
+  }
+
+  /** Fetches the anomalies from clé and recomputes every indicator. */
   function refresh(): Promise<void> {
     return run(async (config, signal) => {
       const cleExport = await downloadExport(config.api, signal)
       const result = await readWorkbook(cleExport.content, readOptions(config))
       if (signal.aborted) return
-      apply(result, { type: 'api', name: cleExport.fileName, receivedAt: cleExport.receivedAt })
+      // No indicator depends on the authors: the figures show at once, the new names follow.
+      apply(
+        { ...result, anomalies: withKnownNames(result.anomalies) },
+        { type: 'api', name: cleExport.fileName, receivedAt: cleExport.receivedAt },
+      )
+      if ((await lookUpAgents(result.anomalies, config.api, signal)) && !signal.aborted) {
+        anomalies.value = withKnownNames(result.anomalies)
+      }
     })
   }
 

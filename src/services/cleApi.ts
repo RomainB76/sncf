@@ -123,6 +123,52 @@ function checkContent(content: ArrayBuffer, contentType: string | null): void {
   // Other content (JSON, CSV, workbook): the reader decides.
 }
 
+/** A CP code, the agent identifier of clé: the only part of a looked-up URL that varies. */
+const CP_CODE = /^[0-9A-Za-z]{1,16}$/
+
+export function isCpCode(value: string): boolean {
+  return CP_CODE.test(value)
+}
+
+/**
+ * Name of the agent behind a CP code — the list API only gives the code. Only the first and
+ * last name are kept from the answer, which also carries the e-mail and role of the agent.
+ *
+ * `null` when clé does not know the code or cannot be reached: the code is then shown as it
+ * stands, a missing name never preventing the data from being displayed.
+ */
+export async function fetchAgentName(
+  api: ApiConfiguration,
+  code: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (!isCpCode(code)) return null
+  let target: string
+  try {
+    target = api.viaProxy
+      ? resourceUrl(`${PROXY_PATH}/users/${code}`)
+      : new URL(`/api/users/${code}`, new URL(api.url, document.baseURI).origin).toString()
+  } catch {
+    return null
+  }
+
+  try {
+    const response = await fetch(target, {
+      headers: { Authorization: `Bearer ${bareToken(api.jwtToken)}`, Accept: 'application/json' },
+      cache: 'no-store',
+      signal,
+    })
+    if (!response.ok) return null
+    const user: unknown = await response.json()
+    if (user === null || typeof user !== 'object') return null
+    const { prenom, nom } = user as { prenom?: unknown; nom?: unknown }
+    const name = [prenom, nom].filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+    return name.length === 0 ? null : name.map((part) => part.trim()).join(' ')
+  } catch {
+    return null
+  }
+}
+
 /**
  * Downloads the clé Excel export.
  * @throws ApiError with a code usable by the interface.
