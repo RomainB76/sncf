@@ -1,6 +1,6 @@
 {
   "api": {
-    "url": "https://cle.exemple.test/api/anomalies/export",
+    "url": "https://<hote-cle>/api/sous-entites/<id-sous-entite>/anomalies?page=0&size=1000&statut=EN_COURS",
     "jwtToken": "<votre token JWT>"
   }
 }

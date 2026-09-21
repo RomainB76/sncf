@@ -112,15 +112,15 @@ function checkContent(content: ArrayBuffer, contentType: string | null): void {
   if (isZip || isOle) return
 
   const start = new TextDecoder('utf-8', { fatal: false }).decode(bytes).replace(/^﻿/, '').trimStart()
-  if (start.startsWith('<') || start.startsWith('{') || start.startsWith('[')) {
-    const nature = start.startsWith('<') ? 'une page HTML/XML' : 'du JSON'
+  // A login page returned with a 200 status. JSON, on the other hand, is the list API of clé.
+  if (start.startsWith('<')) {
     throw new ApiError(
       'FORMAT',
-      `clé a répondu avec ${nature} au lieu d'un fichier Excel.`,
+      "clé a répondu avec une page HTML/XML au lieu des données.",
       `Content-Type : ${contentType ?? 'inconnu'}. Début de la réponse : ${start.replace(/\s+/g, ' ').slice(0, 200)}`,
     )
   }
-  // Other content (CSV for instance): the workbook reader decides.
+  // Other content (JSON, CSV, workbook): the reader decides.
 }
 
 /**

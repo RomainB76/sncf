@@ -138,15 +138,18 @@ describe('downloadExport', () => {
     expect(e.detail).toMatch(/viaProxy/)
   })
 
-  it('detects an HTML page or JSON returned instead of the workbook', async () => {
+  it('detects an HTML page or an empty body returned instead of the data', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('<!doctype html><title>Connexion</title>', { status: 200 })))
     expect((await errorOf(downloadExport(API))).code).toBe('FORMAT')
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('{"message":"ok"}', { status: 200 })))
-    expect((await errorOf(downloadExport(API))).message).toMatch(/JSON/)
-
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(new ArrayBuffer(0), { status: 200 })))
     expect((await errorOf(downloadExport(API))).message).toMatch(/vide/)
+  })
+
+  it('lets JSON through: it is the list API of clé, which the reader then checks', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('{"data":[]}', { status: 200 })))
+    const result = await downloadExport(API)
+    expect(new TextDecoder().decode(result.content)).toBe('{"data":[]}')
   })
 
   it('gives up beyond the configured timeout', async () => {

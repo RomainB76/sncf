@@ -143,6 +143,51 @@ describe('readWorkbook — CSV export of the clé API, whose fields are never qu
   })
 })
 
+describe('readWorkbook — list API of clé (JSON)', () => {
+  const json = (page: unknown) => new TextEncoder().encode(JSON.stringify(page))
+  const TEAM = { id: 'team-uuid-1', libelle: 'MONTAGE 1  ' }
+  const anomaly = (overrides: Record<string, unknown> = {}) => ({
+    numeroLibelle: '33', sef: false, libelle: 'Absent', description: 'Pièce manquante', equipeId: TEAM.id,
+    engin: 'X76611', immatriculationVehicule: 'X76612', createdAt: '2026-09-10T08:00:00.000Z',
+    commentaire: 'En attente', createdByUserCodeCp: '1234567a', ...overrides,
+  })
+
+  it('reads the anomalies, the team name coming from metadatas.equipes', async () => {
+    const { anomalies, warnings } = await readWorkbook(
+      json({ data: [anomaly()], count: 1, metadatas: { equipes: [TEAM] } }),
+      { businessDays: 'computed', referenceDate: '2026-09-18' },
+    )
+
+    expect(warnings).toEqual([])
+    expect(anomalies[0]).toMatchObject({
+      number: '33', sef: 'Non', label: 'Absent', team: 'MONTAGE 1', teamKey: 'MONTAGE 1',
+      trainsetKey: 'X76611', vehicle: 'X76612', creationDate: '2026-09-10', comment: 'En attente',
+      createdBy: '1234567a', businessDays: 6, priority: 'blocking',
+    })
+  })
+
+  it('dates an anomaly in Paris time, not UTC', async () => {
+    // 22:30 UTC on the 9th is already 00:30 on the 10th in Paris (summer time).
+    const { anomalies } = await readWorkbook(
+      json({ data: [anomaly({ createdAt: '2026-09-09T22:30:00.000Z' })], metadatas: { equipes: [TEAM] } }),
+      { businessDays: 'computed', referenceDate: '2026-09-18' },
+    )
+    expect(anomalies[0]?.creationDate).toBe('2026-09-10')
+  })
+
+  it('warns when the page does not hold every anomaly', async () => {
+    const { warnings } = await readWorkbook(
+      json({ data: [anomaly()], count: 126, metadatas: { equipes: [TEAM] } }),
+      { businessDays: 'computed', referenceDate: '2026-09-18' },
+    )
+    expect(warnings.join(' ')).toMatch(/126.*1/)
+  })
+
+  it('rejects a JSON that is not a list of anomalies', async () => {
+    await expect(readWorkbook(json({ message: 'Unauthorized' }))).rejects.toThrow(ReadError)
+  })
+})
+
 describe('readWorkbook — business days', () => {
   const WITHOUT_K = ['Numéro', 'Équipe', 'Rame', 'Date de création']
   const options = { referenceDate: '2026-09-18' }

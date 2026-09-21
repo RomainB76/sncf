@@ -45,7 +45,7 @@ par `.gitignore` — copiez [public/config.local.example.json](public/config.loc
 ```json
 {
   "api": {
-    "url": "https://<hôte-clé>/<chemin-de-l-export>",
+    "url": "https://<hôte-clé>/api/sous-entites/<id-sous-entité>/anomalies?page=0&size=1000&statut=EN_COURS",
     "jwtToken": "<votre token JWT>"
   }
 }
@@ -62,7 +62,7 @@ doit montrer aucun token réel.
 
 | Clé | Rôle |
 |---|---|
-| `api.url` | URL du `GET` qui renvoie le classeur Excel |
+| `api.url` | URL du `GET` qui renvoie les anomalies (API de liste de clé, voir ci-dessous) |
 | `api.jwtToken` | Token JWT, envoyé dans l'en-tête `Authorization: Bearer <token>` |
 | `api.viaProxy` | `true` = l'appel passe par le relais du serveur Vite (voir CORS ci-dessous) |
 | `api.timeoutMs` | Délai maximal de l'appel |
@@ -74,7 +74,24 @@ doit montrer aucun token réel.
 
 Le service d'appel est [src/services/cleApi.ts](src/services/cleApi.ts). Il distingue et explique chaque échec :
 configuration incomplète, token refusé (avec la date d'expiration lue dans le JWT), erreur HTTP, clé injoignable,
-délai dépassé, réponse qui n'est pas un classeur (page de connexion HTML, JSON…).
+délai dépassé, réponse inattendue (page de connexion HTML, JSON qui n'est pas une liste d'anomalies…).
+
+### Pourquoi l'API de liste, et pas l'export CSV
+
+`api.url` vise l'API qui alimente l'écran « Anomalies » de clé, `/api/sous-entites/<id>/anomalies`. **Pas le
+bouton « Exporter en CSV »**, qui semble pourtant plus naturel :
+
+- **L'export fige les données.** Son URL se termine par un horodatage
+  (`…/export-anomalies-<id>-<horodatage>.csv`) : clé génère le fichier depuis la recherche affichée dans la session
+  du navigateur, puis le sert sous ce nom. Une URL figée dans `config.json` renvoie donc éternellement le même
+  fichier, et une URL neuve renvoie 404, faute de session. L'application affichait les chiffres de la veille sans
+  le moindre signal.
+- **L'API de liste est une simple requête** : sans état, filtrée explicitement (`statut=EN_COURS`), avec le total
+  (`count`) et les noms d'équipe (`metadatas.equipes`) dans la même réponse. Ses dates sont en ISO, et le JSON ne
+  connaît ni les retours à la ligne qui coupaient les lignes du CSV, ni l'ambiguïté jour/mois de ses dates.
+
+`size` doit couvrir toutes les anomalies d'une page : au-delà, l'application le signale par un bandeau. « Créée par »
+y est un code CP, pas un nom — l'API ne fournit que l'identifiant de l'agent.
 
 ### Si l'appel est bloqué par le navigateur (CORS)
 

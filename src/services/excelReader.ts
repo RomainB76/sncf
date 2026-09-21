@@ -206,6 +206,90 @@ export function readDate(cell: Cell, date1904 = false): string | null {
   return null
 }
 
+/** One anomaly of the clé list API, reduced to the fields the application uses. */
+interface CleApiAnomaly {
+  numeroLibelle?: unknown
+  sef?: unknown
+  libelle?: unknown
+  description?: unknown
+  equipeId?: unknown
+  engin?: unknown
+  immatriculationVehicule?: unknown
+  createdAt?: unknown
+  commentaire?: unknown
+  createdByUserCodeCp?: unknown
+}
+
+interface CleApiPage {
+  data: CleApiAnomaly[]
+  count?: unknown
+  metadatas?: { equipes?: { id?: unknown; libelle?: unknown }[] }
+}
+
+/** The JSON is laid out under the headers of the CSV export, so that it follows the same reading. */
+const CLE_API_HEADERS = [
+  'Numéro', 'SEF', 'Libellé', 'Description', 'Équipe', 'Rame', 'Véhicule', 'Date de création', 'Commentaire', 'Créée par',
+] as const
+
+/** « YYYY-MM-DD » in Paris time: clé stores UTC, and an anomaly logged just after midnight belongs to that day. */
+const parisDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' })
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : ''
+}
+
+/**
+ * Turns a page of the clé list API (`/sous-entites/{id}/anomalies`) into table rows.
+ *
+ * The team is only an identifier there: its name comes from `metadatas.equipes`, which the API
+ * returns alongside the anomalies it references. Returns `null` when the content is not such a
+ * page, which is then read as a workbook.
+ */
+function cleApiRows(content: Uint8Array): { rows: string[][]; count: number | null } | null {
+  let start = 0
+  while (start < content.length && (content[start] === 0x20 || content[start] === 0x0a || content[start] === 0x0d || content[start] === 0x09)) start++
+  if (content[start] !== 0x7b) return null // « { »
+
+  const raw = new TextDecoder('utf-8').decode(content)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch (e) {
+    throw new ReadError("clé a répondu avec un JSON illisible.", e instanceof Error ? e.message : String(e))
+  }
+  if (parsed === null || typeof parsed !== 'object' || !Array.isArray((parsed as CleApiPage).data)) {
+    throw new ReadError(
+      "clé a répondu avec un JSON qui n'est pas une liste d'anomalies.",
+      `« api.url » doit viser /sous-entites/<id>/anomalies. Début de la réponse : ${raw.replace(/\s+/g, ' ').slice(0, 200)}`,
+    )
+  }
+  const page = parsed as CleApiPage
+
+  const teams = new Map<string, string>()
+  for (const team of page.metadatas?.equipes ?? []) {
+    if (typeof team.id === 'string') teams.set(team.id, text(team.libelle))
+  }
+
+  const rows: string[][] = [[...CLE_API_HEADERS]]
+  for (const a of page.data) {
+    const createdAt = typeof a.createdAt === 'string' ? new Date(a.createdAt) : null
+    rows.push([
+      text(a.numeroLibelle),
+      a.sef === true ? 'Oui' : a.sef === false ? 'Non' : '',
+      text(a.libelle),
+      text(a.description),
+      typeof a.equipeId === 'string' ? (teams.get(a.equipeId) ?? '') : '',
+      text(a.engin),
+      text(a.immatriculationVehicule),
+      createdAt && !Number.isNaN(createdAt.getTime()) ? parisDay.format(createdAt) : '',
+      text(a.commentaire),
+      text(a.createdByUserCodeCp),
+    ])
+  }
+
+  return { rows, count: typeof page.count === 'number' ? page.count : null }
+}
+
 const CSV_DELIMITERS = [';', '\t', ','] as const
 
 /**
@@ -279,15 +363,22 @@ export async function readWorkbook(
   // SheetJS is large: loaded on demand, outside the main bundle.
   const XLSX = await import('xlsx')
 
-  const csv = csvText(content instanceof Uint8Array ? content : new Uint8Array(content))
+  const bytes = content instanceof Uint8Array ? content : new Uint8Array(content)
+  const api = cleApiRows(bytes)
 
   let workbook
   try {
-    workbook = csv === null
-      ? XLSX.read(content, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false })
-      // « raw »: SheetJS reads a CSV with US conventions and would turn « 10/09/2026 » into
-      // 9 October. Everything stays text, which readDate reads as day/month/year.
-      : XLSX.read(csv, { type: 'string', raw: true, cellDates: false, cellFormula: false, cellHTML: false })
+    if (api) {
+      workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(api.rows), 'clé')
+    } else {
+      const csv = csvText(bytes)
+      workbook = csv === null
+        ? XLSX.read(bytes, { type: 'array', cellDates: false, cellFormula: false, cellHTML: false })
+        // « raw »: SheetJS reads a CSV with US conventions and would turn « 10/09/2026 » into
+        // 9 October. Everything stays text, which readDate reads as day/month/year.
+        : XLSX.read(csv, { type: 'string', raw: true, cellDates: false, cellFormula: false, cellHTML: false })
+    }
   } catch (e) {
     throw new ReadError(
       "Le fichier reçu n'est pas un classeur Excel lisible.",
@@ -301,6 +392,12 @@ export async function readWorkbook(
   }
 
   const warnings: string[] = []
+  const received = api ? api.rows.length - 1 : 0
+  if (api?.count != null && api.count > received) {
+    warnings.push(
+      `clé compte ${api.count} anomalies mais n'en a renvoyé que ${received} : augmentez « size » dans « api.url » pour les recevoir toutes.`,
+    )
+  }
   const firstSheet = availableSheets[0] as string
   let sheetName = firstSheet
   if (options.sheet) {
